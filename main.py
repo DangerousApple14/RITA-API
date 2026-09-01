@@ -15,6 +15,7 @@ import sqlite3
 import time
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs
 
 # ============================================================
 # CONFIG
@@ -224,11 +225,6 @@ RITA_EMOTES = {
     "RitaMiddleFinger": "<:RitaMiddleFinger:1540298956209127484>",
 }
 
-# ============================================================
-# DUCKDUCKGO SEARCH
-# ============================================================
-
-
 
 # ============================================================
 # MULTIPLE OVERLAYS
@@ -402,26 +398,292 @@ def remove_duplicate_outputs(text: str) -> str:
 
     return "\n".join(cleaned_lines)
 
-# ============================================================
-# DUCKDUCKGO SEARCH
-# ============================================================
+# ------------------------------------------------------------
+# DuckDuckGo search
+# ------------------------------------------------------------
 
-def duck_search(query: str, max_results: int = 3) -> str:
-    """
-    Fetches real-time web search results. 
-    Using DuckDuckGo as a reliable, free, no-auth alternative to Google Custom Search.
-    """
+def duckduckgo_search(query: str, limit: int = 5):
+
+    print("\n" + "=" * 60)
+    print("[WEB DEBUG] DuckDuckGo search starting")
+    print(f"[WEB DEBUG] Query: {query!r}")
+    print("=" * 60)
+
+    url = "https://html.duckduckgo.com/html/"
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 "
+            "(KHTML, like Gecko) "
+            "Chrome/140.0.0.0 Safari/537.36"
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,"
+            "application/xml;q=0.9,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
     try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.text(query, max_results=max_results)]
-            
-        context_lines = []
-        for i, res in enumerate(results, 1):
-            context_lines.append(f"[{i}] Source: {res['href']}\nTitle: {res['title']}\nSnippet: {res['body']}\n")
-            
-        return "\n".join(context_lines)
+
+        response = requests.get(
+            url,
+            params={"q": query},
+            headers=headers,
+            timeout=15
+        )
+
+        print(
+            f"[WEB DEBUG] HTTP status: {response.status_code}"
+        )
+
+        print(
+            f"[WEB DEBUG] Final URL: {response.url}"
+        )
+
+        print(
+            f"[WEB DEBUG] Response size: "
+            f"{len(response.text):,} characters"
+        )
+
+        response.raise_for_status()
+
     except Exception as e:
-        return f"Failed to fetch search results: {str(e)}"
+
+        print(
+            f"[WEB DEBUG] DuckDuckGo request FAILED: "
+            f"{type(e).__name__}: {e}"
+        )
+
+        raise
+
+
+    # --------------------------------------------------------
+    # Parse HTML
+    # --------------------------------------------------------
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
+
+    print(
+        f"[WEB DEBUG] Page title: "
+        f"{soup.title.get_text(strip=True) if soup.title else 'NONE'}"
+    )
+
+
+    # Try multiple known result selectors.
+    result_blocks = soup.select(
+        "article[data-testid='result'], "
+        "div[data-testid='result'], "
+        "div.result, "
+        "div.web-result"
+    )
+
+    print(
+        f"[WEB DEBUG] Result containers found: "
+        f"{len(result_blocks)}"
+    )
+
+
+    # --------------------------------------------------------
+    # If nothing was found, dump useful diagnostics
+    # --------------------------------------------------------
+
+    if not result_blocks:
+
+        print(
+            "[WEB DEBUG] NO RESULT CONTAINERS FOUND."
+        )
+
+        # Check whether DDG returned some kind of bot/challenge page.
+        page_text = soup.get_text(
+            " ",
+            strip=True
+        )
+
+        print(
+            "[WEB DEBUG] First 1000 chars of page text:"
+        )
+
+        print(
+            page_text[:1000]
+        )
+
+        print(
+            "\n[WEB DEBUG] Links found on page:"
+        )
+
+        links = soup.find_all(
+            "a",
+            href=True
+        )
+
+        print(
+            f"[WEB DEBUG] Total links: {len(links)}"
+        )
+
+        for link in links[:20]:
+
+            print(
+                "   ",
+                link.get_text(" ", strip=True)[:100],
+                "->",
+                link.get("href")
+            )
+
+        return []
+
+
+    # --------------------------------------------------------
+    # Extract results
+    # --------------------------------------------------------
+
+    results = []
+
+    for index, result in enumerate(
+        result_blocks,
+        start=1
+    ):
+
+        if len(results) >= limit:
+            break
+
+        try:
+
+            # Current/common DDG title selectors
+            link = result.select_one(
+                "h2 a, "
+                "h3 a, "
+                "a.result__a"
+            )
+
+            if not link:
+
+                print(
+                    f"[WEB DEBUG] Result #{index}: "
+                    f"no title/link found"
+                )
+
+                continue
+
+
+            title = link.get_text(
+                " ",
+                strip=True
+            )
+
+            href = link.get(
+                "href"
+            )
+
+
+            if not title or not href:
+
+                print(
+                    f"[WEB DEBUG] Result #{index}: "
+                    f"missing title or URL"
+                )
+
+                continue
+
+
+            # ------------------------------------------------
+            # Resolve DuckDuckGo redirect URLs
+            # ------------------------------------------------
+
+            if href.startswith(
+                "//duckduckgo.com/l/?"
+            ):
+
+                href = (
+                    "https:"
+                    + href
+                )
+
+
+            parsed = urlparse(
+                href
+            )
+
+            query_params = parse_qs(
+                parsed.query
+            )
+
+            if "uddg" in query_params:
+
+                href = query_params[
+                    "uddg"
+                ][0]
+
+
+            # ------------------------------------------------
+            # Snippet
+            # ------------------------------------------------
+
+            snippet_element = result.select_one(
+                "[data-result='snippet'], "
+                ".result__snippet"
+            )
+
+            snippet = (
+                snippet_element.get_text(
+                    " ",
+                    strip=True
+                )
+                if snippet_element
+                else ""
+            )
+
+
+            item = {
+                "title": title,
+                "url": href,
+                "description": snippet
+            }
+
+            results.append(
+                item
+            )
+
+            print(
+                f"[WEB DEBUG] Result #{len(results)}:"
+            )
+
+            print(
+                f"    Title: {title}"
+            )
+
+            print(
+                f"    URL:   {href}"
+            )
+
+            print(
+                f"    Snip:  {snippet[:200]}"
+            )
+
+
+        except Exception as e:
+
+            print(
+                f"[WEB DEBUG] Error parsing "
+                f"result #{index}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+            continue
+
+
+    print(
+        f"[WEB DEBUG] Final DDG results: "
+        f"{len(results)}"
+    )
+
+    print("=" * 60)
+
+    return results
 
 # ============================================================
 # DISCORD SETUP
@@ -2851,6 +3113,13 @@ async def rita_search(
             5
         )
 
+
+        # Debugging
+        print(
+            f"[WEB DEBUG] Search returned "
+            f"{len(results)} results"
+        )
+
         if not results:
 
             await searching_msg.edit(
@@ -2862,6 +3131,12 @@ async def rita_search(
 
             return
 
+        # More debugging
+        for i, result in enumerate(results, start=1):
+            print(
+                f"[WEB DEBUG] Search result {i}: "
+                f"{result['title']} -> {result['url']}"
+            )
 
         print(
             f"[WEB] DuckDuckGo returned "
