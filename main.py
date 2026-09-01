@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 import sqlite3
 import time
 from duckduckgo_search import DDGS
-import httpx
 from bs4 import BeautifulSoup
 
 # ============================================================
