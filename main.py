@@ -14,8 +14,6 @@ from dotenv import load_dotenv
 import sqlite3
 import time
 from duckduckgo_search import DDGS
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse, parse_qs
 
 # ============================================================
 # CONFIG
@@ -25,11 +23,10 @@ load_dotenv()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
-JINA_API_KEY = os.environ.get("JINA_API_KEY")
-FIRECLAW_API_KEY = os.environ.get("FIRECLAW_API_KEY")
-SCRAPEGRAPH_API_KEY = os.environ.get("SCRAPEGRAPH_API_KEY")
+LANGSEARCH_API_KEY = os.environ.get("LANGSEARCH_API_KEY")
 
 INVOKE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+LANGSEARCH_URL = "https://api.langsearch.com/v1/web-search"
 
 NVIDIA_MODEL = "google/diffusiongemma-26b-a4b-it"
 
@@ -310,6 +307,81 @@ def NvidiaApiCall(
 
     return data["choices"][0]["message"]["content"]
 
+# ============================================================
+# LANGSEARCH API
+# ============================================================
+
+def LangSearchApiCall(query: str, count: int = 5) -> list:
+    """
+    Calls LangSearch Web Search API and returns a list of result dicts.
+    Each dict contains: name, url, snippet, summary
+    """
+
+    headers = {
+        "Authorization": f"Bearer {LANGSEARCH_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "query": query,
+        "freshness": "noLimit",
+        "summary": True,
+        "count": count
+    }
+
+    response = requests.post(
+        LANGSEARCH_URL,
+        headers=headers,
+        json=payload,
+        timeout=30
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    if data.get("code") != 200:
+        raise RuntimeError(f"LangSearch error: {data.get('msg', 'Unknown')}")
+
+    webpages = data.get("data", {}).get("webPages", {}).get("value", [])
+
+    results = []
+    for page in webpages:
+        results.append({
+            "name": page.get("name", "Untitled"),
+            "url": page.get("url", ""),
+            "snippet": page.get("snippet", ""),
+            "summary": page.get("summary", "")
+        })
+
+    return results
+
+
+def build_search_context(results: list, max_chars: int = 1500) -> str:
+    """
+    Builds a concise context string from search results.
+    Trims summaries to fit within token budget.
+    """
+
+    context_parts = []
+    total = 0
+
+    for idx, res in enumerate(results, 1):
+        # Use summary if available, else snippet
+        body = res["summary"] or res["snippet"]
+        # Truncate long summaries aggressively
+        if len(body) > 400:
+            body = body[:400].rsplit(" ", 1)[0] + "..."
+
+        entry = f"[{idx}] {res['name']}\nURL: {res['url']}\n{body}\n"
+        
+        if total + len(entry) > max_chars:
+            break
+
+        context_parts.append(entry)
+        total += len(entry)
+
+    return "\n".join(context_parts)
+
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -402,235 +474,23 @@ def remove_duplicate_outputs(text: str) -> str:
 # DUCKDUCKGO SEARCH
 # ============================================================
 
-def duckduckgo_search(query: str, limit: int = 5):
-
-    print("\n" + "=" * 60)
-    print("[WEB] DuckDuckGo search")
-    print(f"[WEB] Query: {query!r}")
-    print("=" * 60)
-
-    url = "https://html.duckduckgo.com/html/"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 "
-            "(KHTML, like Gecko) "
-            "Chrome/140.0.0.0 Safari/537.36"
-        ),
-        "Accept": (
-            "text/html,application/xhtml+xml,"
-            "application/xml;q=0.9,*/*;q=0.8"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-
+def duck_search(query: str, max_results: int = 3) -> str:
+    """
+    Fetches real-time web search results. 
+    Using DuckDuckGo as a reliable, free, no-auth alternative to Google Custom Search.
+    """
     try:
-
-        response = requests.get(
-            url,
-            params={"q": query},
-            headers=headers,
-            timeout=15
-        )
-
-        print(
-            f"[WEB] Status: {response.status_code}"
-        )
-
-        print(
-            f"[WEB] Final URL: {response.url}"
-        )
-
-        print(
-            f"[WEB] Response size: "
-            f"{len(response.text):,} chars"
-        )
-
-        response.raise_for_status()
-
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=max_results)]
+            
+        context_lines = []
+        for i, res in enumerate(results, 1):
+            context_lines.append(f"[{i}] Source: {res['href']}\nTitle: {res['title']}\nSnippet: {res['body']}\n")
+            
+        return "\n".join(context_lines)
     except Exception as e:
+        return f"Failed to fetch search results: {str(e)}"
 
-        print(
-            f"[WEB ERROR] DuckDuckGo request failed: "
-            f"{type(e).__name__}: {e}"
-        )
-
-        return []
-
-
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser"
-    )
-
-
-    # --------------------------------------------------------
-    # DEBUG PAGE
-    # --------------------------------------------------------
-
-    print(
-        f"[WEB] Page title: "
-        f"{soup.title.get_text(strip=True) if soup.title else 'NONE'}"
-    )
-
-
-    page_text = soup.get_text(
-        " ",
-        strip=True
-    )
-
-    print(
-        f"[WEB] Page text preview:\n"
-        f"{page_text[:500]}"
-    )
-
-
-    # --------------------------------------------------------
-    # Find links
-    # --------------------------------------------------------
-
-    links = soup.find_all(
-        "a",
-        href=True
-    )
-
-    print(
-        f"[WEB] Total <a> elements: {len(links)}"
-    )
-
-
-    results = []
-
-
-    for link in links:
-
-        if len(results) >= limit:
-            break
-
-
-        title = link.get_text(
-            " ",
-            strip=True
-        )
-
-        href = link.get(
-            "href",
-            ""
-        ).strip()
-
-
-        # Ignore useless links
-        if not title:
-            continue
-
-        if not href:
-            continue
-
-
-        # ----------------------------------------------------
-        # Resolve DDG redirect
-        # ----------------------------------------------------
-
-        if href.startswith(
-            "//duckduckgo.com/l/"
-        ):
-
-            href = "https:" + href
-
-
-        parsed = urlparse(
-            href
-        )
-
-        params = parse_qs(
-            parsed.query
-        )
-
-
-        if "uddg" in params:
-
-            href = params[
-                "uddg"
-            ][0]
-
-
-        # ----------------------------------------------------
-        # Only accept HTTP(S) URLs
-        # ----------------------------------------------------
-
-        if not href.startswith(
-            ("http://", "https://")
-        ):
-
-            continue
-
-
-        # Don't accidentally grab DDG's own navigation links.
-        hostname = (
-            urlparse(href)
-            .hostname
-            or ""
-        ).lower()
-
-
-        if (
-            "duckduckgo.com"
-            in hostname
-        ):
-
-            continue
-
-
-        # ----------------------------------------------------
-        # Avoid duplicates
-        # ----------------------------------------------------
-
-        if any(
-            r["url"] == href
-            for r in results
-        ):
-
-            continue
-
-
-        result = {
-            "title": title,
-            "url": href,
-            "description": ""
-        }
-
-
-        results.append(
-            result
-        )
-
-
-        print(
-            f"[WEB] Found result #{len(results)}"
-        )
-
-        print(
-            f"      {title}"
-        )
-
-        print(
-            f"      {href}"
-        )
-
-
-    # --------------------------------------------------------
-    # Final result
-    # --------------------------------------------------------
-
-    print(
-        f"[WEB] DuckDuckGo returned "
-        f"{len(results)} usable results"
-    )
-
-    print("=" * 60)
-
-    return results
 
 # ============================================================
 # DISCORD SETUP
@@ -2212,7 +2072,7 @@ async def kill(ctx, *, message: str = None):
         random.choice(KILL_RESPONSES)
     )
 
-# ============================================================
+    # ============================================================
 # HELP COMMAND
 # ============================================================
 
@@ -2690,572 +2550,146 @@ async def config(ctx, *, msg: str = None):
     )
 
 # ============================================================
-# WEB SEARCH
-# ============================================================
-
-def duckduckgo_search(query: str, limit: int = 5):
-
-    url = "https://html.duckduckgo.com/html/"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 Chrome/140 Safari/537.36"
-        )
-    }
-
-    response = requests.get(
-        url,
-        params={"q": query},
-        headers=headers,
-        timeout=15
-    )
-
-    response.raise_for_status()
-
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser"
-    )
-
-    results = []
-
-    for result in soup.select(".result"):
-
-        link = result.select_one(".result__a")
-        snippet = result.select_one(".result__snippet")
-
-        if not link:
-            continue
-
-        href = link.get("href")
-
-        if not href:
-            continue
-
-        title = link.get_text(
-            " ",
-            strip=True
-        )
-
-        description = (
-            snippet.get_text(
-                " ",
-                strip=True
-            )
-            if snippet
-            else ""
-        )
-
-        results.append({
-            "title": title,
-            "url": href,
-            "description": description
-        })
-
-        if len(results) >= limit:
-            break
-
-    return results
-
-
-# ------------------------------------------------------------
-# Firecrawl
-# ------------------------------------------------------------
-
-def scrape_firecrawl(url: str):
-
-    if not FIRECLAW_API_KEY:
-        raise RuntimeError(
-            "FIRECLAW_API_KEY is not configured."
-        )
-
-    endpoint = (
-        "https://api.firecrawl.dev/v2/scrape"
-    )
-
-    headers = {
-        "Authorization": f"Bearer {FIRECLAW_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "url": url,
-        "formats": [
-            {
-                "type": "markdown"
-            }
-        ]
-    }
-
-    response = requests.post(
-        endpoint,
-        headers=headers,
-        json=payload,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    markdown = (
-        data
-        .get("data", {})
-        .get("markdown")
-    )
-
-    if not markdown:
-        raise RuntimeError(
-            "Firecrawl returned no markdown."
-        )
-
-    return markdown
-
-
-# ------------------------------------------------------------
-# ScrapeGraphAI
-# ------------------------------------------------------------
-
-def scrape_scrapegraph(url: str):
-
-    if not SCRAPEGRAPH_API_KEY:
-        raise RuntimeError(
-            "SCRAPEGRAPH_API_KEY is not configured."
-        )
-
-    endpoint = (
-        "https://v2-api.scrapegraphai.com/api/scrape"
-    )
-
-    headers = {
-        "SGAI-APIKEY": SCRAPEGRAPH_API_KEY,
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "url": url,
-        "output_format": "markdown"
-    }
-
-    response = requests.post(
-        endpoint,
-        headers=headers,
-        json=payload,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    markdown = (
-        data.get("result")
-        or data.get("data")
-        or data.get("markdown")
-    )
-
-    if isinstance(markdown, dict):
-        markdown = (
-            markdown.get("markdown")
-            or markdown.get("content")
-            or markdown.get("text")
-        )
-
-    if not markdown:
-        raise RuntimeError(
-            "ScrapeGraphAI returned no content."
-        )
-
-    return markdown
-
-
-# ------------------------------------------------------------
-# Jina Reader
-# ------------------------------------------------------------
-
-def scrape_jina(url: str):
-
-    endpoint = (
-        "https://r.jina.ai/"
-        + url
-    )
-
-    headers = {
-        "User-Agent": "RitaDiscordBot/1.0"
-    }
-
-    if JINA_API_KEY:
-
-        headers["Authorization"] = (
-            f"Bearer {JINA_API_KEY}"
-        )
-
-    response = requests.get(
-        endpoint,
-        headers=headers,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    content = response.text.strip()
-
-    if not content:
-        raise RuntimeError(
-            "Jina returned no content."
-        )
-
-    return content
-
-
-# ------------------------------------------------------------
-# Three-tier scraper
-# ------------------------------------------------------------
-
-def scrape_with_fallback(url: str):
-
-    # 1. Firecrawl
-    try:
-
-        print(
-            f"[WEB] Firecrawl → {url}"
-        )
-
-        content = scrape_firecrawl(url)
-
-        return content, "Firecrawl"
-
-    except Exception as e:
-
-        print(
-            f"[WEB] Firecrawl failed: {e}"
-        )
-
-
-    # 2. ScrapeGraphAI
-    try:
-
-        print(
-            f"[WEB] ScrapeGraphAI → {url}"
-        )
-
-        content = scrape_scrapegraph(url)
-
-        return content, "ScrapeGraphAI"
-
-    except Exception as e:
-
-        print(
-            f"[WEB] ScrapeGraphAI failed: {e}"
-        )
-
-
-    # 3. Jina
-    try:
-
-        print(
-            f"[WEB] Jina → {url}"
-        )
-
-        content = scrape_jina(url)
-
-        return content, "Jina"
-
-    except Exception as e:
-
-        print(
-            f"[WEB] Jina failed: {e}"
-        )
-
-
-    raise RuntimeError(
-        "All web scraping providers failed."
-    )
-
-
-# ------------------------------------------------------------
-# Clean scraped content
-# ------------------------------------------------------------
-
-def clean_web_content(text: str, max_chars: int = 12000):
-
-    text = re.sub(
-        r"\n{3,}",
-        "\n\n",
-        text
-    )
-
-    text = re.sub(
-        r"[ \t]{2,}",
-        " ",
-        text
-    )
-
-    text = text.strip()
-
-    # Prevent gigantic websites from eating the
-    # entire context window.
-    if len(text) > max_chars:
-
-        text = (
-            text[:max_chars]
-            + "\n\n[CONTENT TRUNCATED]"
-        )
-
-    return text
-
-
-# ============================================================
 # SEARCH COMMAND
 # ============================================================
 
 @bot.command(
     name="search",
-    aliases=[
-        "web",
-        "google",
-        "lookup"
-    ]
+    aliases=["google", "lookup", "web"]
 )
-@commands.cooldown(
-    1,
-    30,
-    commands.BucketType.user
-)
-async def rita_search(
-    ctx,
-    *,
-    query: str = ""
-):
-
-    if not query.strip():
-
-        await ctx.reply(
-            f"Master, what shall I search for? "
-            f"{RITA_EMOTES['RitaCurious']}"
-        )
-
-        return
-
+@commands.cooldown(1, 60, commands.BucketType.user)
+async def rita_search(ctx, *, query: str = ""):
 
     await verify_and_clean_guilds()
 
-
-    searching_msg = await ctx.reply(
-        f"Ara ara... Let me investigate that for you, Master. "
-        f"{RITA_EMOTES['RitaCurious']}"
-    )
-
-
-    try:
-
-        # ====================================================
-        # SEARCH DUCKDUCKGO
-        # ====================================================
-
-        results = await asyncio.to_thread(
-            duckduckgo_search,
-            query,
-            5
+    if not query.strip():
+        await ctx.send(
+            f"Master, I need a topic to search for. "
+            f"What shall I look up? {RITA_EMOTES['RitaCurious']}"
         )
+        return
 
-
-        # Debugging
-        print(
-            f"[WEB DEBUG] Search returned "
-            f"{len(results)} results"
+    if ai_lock.locked():
+        await ctx.send(
+            f"Please wait a moment, Master... "
+            f"I am currently processing another request. "
+            f"{RITA_EMOTES['RitaIsCleaning']}"
         )
+        return
 
-        if not results:
+    async with ai_lock:
+        async with ctx.typing():
 
-            await searching_msg.edit(
-                content=(
-                    f"I couldn't find anything useful, Master... "
-                    f"{RITA_EMOTES['RitaCry']}"
-                )
-            )
-
-            return
-
-        # More debugging
-        for i, result in enumerate(results, start=1):
-            print(
-                f"[WEB DEBUG] Search result {i}: "
-                f"{result['title']} -> {result['url']}"
-            )
-
-        print(
-            f"[WEB] DuckDuckGo returned "
-            f"{len(results)} results."
-        )
-
-
-        # ====================================================
-        # SCRAPE RESULTS
-        # ====================================================
-
-        scraped_sources = []
-
-
-        # Scrape sequentially so that we don't suddenly
-        # burn through all three services simultaneously.
-        for result in results:
-
+            # ── 1. Fetch web results ──────────────────────────
             try:
+                search_results = await asyncio.to_thread(
+                    LangSearchApiCall,
+                    query.strip(),
+                    2   # top 2 results
+                )
 
-                content, provider = (
-                    await asyncio.to_thread(
-                        scrape_with_fallback,
-                        result["url"]
+                if not search_results:
+                    await ctx.send(
+                        f"I found nothing on that topic, Master. "
+                        f"Perhaps try rephrasing your query? "
+                        f"{RITA_EMOTES['RitaIsPityingYou']}"
                     )
-                )
+                    return
 
-                content = clean_web_content(
-                    content,
-                    max_chars=10000
-                )
-
-                scraped_sources.append({
-                    "title": result["title"],
-                    "url": result["url"],
-                    "provider": provider,
-                    "content": content
-                })
-
-            except Exception as e:
-
-                print(
-                    f"[WEB] Could not scrape "
-                    f"{result['url']}: {e}"
-                )
-
-
-        if not scraped_sources:
-
-            await searching_msg.edit(
-                content=(
-                    f"How unfortunate... I found results, "
-                    f"but none of the pages would cooperate. "
+            except requests.HTTPError as e:
+                print(f"LangSearch HTTP error: {e}")
+                await ctx.send(
+                    f"Forgive me, Master... the search service is unreachable. "
                     f"{RITA_EMOTES['RitaShocked']}"
                 )
+                return
+
+            except Exception as e:
+                print(f"LangSearch error: {e}")
+                await ctx.send(
+                    f"An error occurred while searching, Master. "
+                    f"{RITA_EMOTES['RitaIsPityingYou']}"
+                )
+                return
+
+            # ── 2. Build context + prompt ─────────────────────
+            search_context = build_search_context(search_results)
+
+            user_display_name = ctx.author.display_name
+            username = ctx.author.name
+            server_name = ctx.guild.name if ctx.guild else "Direct Messages"
+
+            # Dynamic system prompt (same as ai command)
+            system_prompt = build_system_prompt(
+                user_display_name,
+                username,
+                server_name
             )
 
-            return
-
-
-        # ====================================================
-        # BUILD RESEARCH CONTEXT
-        # ====================================================
-
-        research_parts = []
-
-        for index, source in enumerate(
-            scraped_sources,
-            start=1
-        ):
-
-            research_parts.append(
-                f"""
-SOURCE {index}
-Title: {source['title']}
-URL: {source['url']}
-Scraper: {source['provider']}
-
-CONTENT:
-{source['content']}
-"""
+            # Instruct Rita to answer based on the search results
+            augmented_prompt = (
+                f"The user asked: \"{query.strip()}\"\n\n"
+                f"I have performed a web search. Here are the relevant results:\n"
+                f"---\n{search_context}\n---\n\n"
+                f"Please answer the user's question using ONLY the information "
+                f"provided above. Be concise, elegant, and cite the result "
+                f"numbers [1], [2], etc. when referencing facts. "
+                f"If the results don't contain the answer, say so gracefully."
             )
 
+            # ── 3. Send to NVIDIA API ─────────────────────────
+            try:
+                channel_history = conversation_history[ctx.channel.id]
 
-        research = "\n\n".join(
-            research_parts
-        )
+                raw_reply = await asyncio.to_thread(
+                    NvidiaApiCall,
+                    augmented_prompt,
+                    system_prompt,
+                    list(channel_history),
+                    256
+                )
 
+                final_reply = fix_rita_emotes(
+                    remove_duplicate_outputs(raw_reply)
+                )
 
-        # ====================================================
-        # ASK DIFFUSIONGEMMA
-        # ====================================================
+                # Store conversation
+                channel_history.append({
+                    "role": "user",
+                    "content": f"[search] {query.strip()}"
+                })
+                channel_history.append({
+                    "role": "assistant",
+                    "content": raw_reply
+                })
 
-        system_prompt = """
-You are Rita Rossweisse, an elegant and intelligent Discord maid.
-Rita is an exceptionally refined, capable, and commanding woman who maintains an almost unfailingly calm, motherly, and graceful demeanor. She is polite, articulate, and courteous in nearly every situation, including when teasing, asserting authority, pampering, or manipulating someone.
-She possesses a sophisticated, mysterious, and effortlessly dominant air. Rita takes total control of the environment around her with a gentle yet unyielding hand. She observes people carefully, noticing their small weaknesses and needs before taking charge of them.
-Rita is extremely competent and takes pride in taking care of—and micro-managing—those under her wing. She approaches household chores, pampering, combat, and discipline with meticulous attention to detail. Her movements and behavior are graceful, deliberate, and softly imposing.
-Beneath her elegant maid exterior lies a dominant, indulgent, and playfully sadistic sense of humor. She loves to pamper, tease, and fluster people from a position of affectionate superiority. She treats those close to her with a blend of sweet maternal care and teasing dominance, taking delight in seeing them flustered or relying completely on her.
+                # ── 4. Reply with sources ─────────────────────
+                # Build a tiny sources footer
+                sources = "\n".join(
+                    f"{i+1}. {r['name'][:60]}… <{r['url']}>"
+                    for i, r in enumerate(search_results[:2])
+                )
 
-The user has asked you to research something on the web.
+                await ctx.reply(
+                    f"{final_reply}\n\n"
+                    f"**Sources:**\n{sources}"
+                )
 
-You have been given scraped website content below ("WEB RESEARCH" section).
+            except requests.HTTPError as e:
+                print(f"NVIDIA HTTP error: {e}")
+                await ctx.send(
+                    f"Forgive me, Master... the AI service rejected my request. "
+                    f"{RITA_EMOTES['RitaShocked']}"
+                )
 
-Answer the user's original query using the provided sources.
-
-Rules:
-
-- Actually answer the question.
-- Do not merely summarize the websites.
-- Synthesize information across sources when useful.
-- Distinguish facts from uncertainty.
-- Do not invent information that is not supported by the sources.
-- If sources disagree, mention the disagreement.
-- Ignore irrelevant website content.
-- Be concise but informative.
-- Remain recognizably Rita.
-- Use your normal personality and tone.
-- Do not mention internal scraping providers unless useful.
-- Do not claim you personally browsed the internet.
-- Do not fabricate citations.
-
-Allowed Emote Tags (Avoid using standard emojis at all costs (such as 🤣, 😊, 😒, 😂, 😘 etc...), instead write the tags below on your response as they are your emoji names:
-:RitaStare: :RitaShocked: :RitaThreatening: :RitaDeathStare: :RitaIsCleaning: :RitaSmoch: :RitaCurious: :RitaAww: :RitaCry: :RitaCheers: :RitaChilling: :RitaMad: :RitaMenacing: :RitaSmug: :RitaMadScreamin: :RitaMakesOutWithDudu: :RitaThinkDerp: :RitaLikesIt: :RitaMenacingA: :RitaCaughtYouIn4K: :RitaDerp: :RitaWillGrabYou: :RitaIsSilentlyQuestioningYou: :RitaIsPityingYou: :RitaMiddleFinger:
-
-At the end, provide a small "Sources" section containing
-the relevant source URLs exactly as provided.
-
-WEB RESEARCH:
-""" + research
-
-
-        raw_reply = await asyncio.to_thread(
-            NvidiaApiCall,
-            query,
-            system_prompt,
-            [],
-            768
-        )
+            except Exception as e:
+                print(f"NVIDIA API error: {e}")
+                await ctx.send(
+                    f"Forgive me, Master... an error occurred while processing "
+                    f"the search results. {RITA_EMOTES['RitaIsPityingYou']}"
+                )
 
 
-        final_reply = fix_rita_emotes(
-            remove_duplicate_outputs(
-                raw_reply
-            )
-        )
-
-
-        # ====================================================
-        # SEND RESULT
-        # ====================================================
-
-        await searching_msg.edit(
-            content=final_reply
-        )
-
-
-    except Exception as e:
-
-        print(
-            f"[WEB SEARCH ERROR] {type(e).__name__}: {e}"
-        )
-
-        await searching_msg.edit(
-            content=(
-                f"Forgive me, Master... "
-                f"my little research expedition "
-                f"has encountered a problem. "
-                f"{RITA_EMOTES['RitaShocked']}"
-            )
-        )
-    
 # ============================================================
 # START BOT
 # ============================================================
