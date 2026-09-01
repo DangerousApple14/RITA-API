@@ -13,6 +13,7 @@ from randfacts import get_fact
 from dotenv import load_dotenv
 import sqlite3
 import time
+from duckduckgo_search import DDGS
 
 # ============================================================
 # CONFIG
@@ -220,6 +221,12 @@ RITA_EMOTES = {
 }
 
 # ============================================================
+# DUCKDUCKGO SEARCH
+# ============================================================
+
+
+
+# ============================================================
 # MULTIPLE OVERLAYS
 # ============================================================
 
@@ -390,6 +397,27 @@ def remove_duplicate_outputs(text: str) -> str:
             cleaned_lines.append(line)
 
     return "\n".join(cleaned_lines)
+
+# ============================================================
+# DUCKDUCKGO SEARCH
+# ============================================================
+
+def duck_search(query: str, max_results: int = 3) -> str:
+    """
+    Fetches real-time web search results. 
+    Using DuckDuckGo as a reliable, free, no-auth alternative to Google Custom Search.
+    """
+    try:
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=max_results)]
+            
+        context_lines = []
+        for i, res in enumerate(results, 1):
+            context_lines.append(f"[{i}] Source: {res['href']}\nTitle: {res['title']}\nSnippet: {res['body']}\n")
+            
+        return "\n".join(context_lines)
+    except Exception as e:
+        return f"Failed to fetch search results: {str(e)}"
 
 
 # ============================================================
@@ -687,6 +715,8 @@ async def rita_ai(ctx, *, prompt: str = ""):
                     f"an error occurred while processing your request. "
                     f"{RITA_EMOTES['RitaIsPityingYou']}"
                 )
+
+# ctrl - f here later 
 
 # ============================================================
 # FORGET MEMORY
