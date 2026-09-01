@@ -398,15 +398,15 @@ def remove_duplicate_outputs(text: str) -> str:
 
     return "\n".join(cleaned_lines)
 
-# ------------------------------------------------------------
-# DuckDuckGo search
-# ------------------------------------------------------------
+# ============================================================
+# DUCKDUCKGO SEARCH
+# ============================================================
 
 def duckduckgo_search(query: str, limit: int = 5):
 
     print("\n" + "=" * 60)
-    print("[WEB DEBUG] DuckDuckGo search starting")
-    print(f"[WEB DEBUG] Query: {query!r}")
+    print("[WEB] DuckDuckGo search")
+    print(f"[WEB] Query: {query!r}")
     print("=" * 60)
 
     url = "https://html.duckduckgo.com/html/"
@@ -435,16 +435,16 @@ def duckduckgo_search(query: str, limit: int = 5):
         )
 
         print(
-            f"[WEB DEBUG] HTTP status: {response.status_code}"
+            f"[WEB] Status: {response.status_code}"
         )
 
         print(
-            f"[WEB DEBUG] Final URL: {response.url}"
+            f"[WEB] Final URL: {response.url}"
         )
 
         print(
-            f"[WEB DEBUG] Response size: "
-            f"{len(response.text):,} characters"
+            f"[WEB] Response size: "
+            f"{len(response.text):,} chars"
         )
 
         response.raise_for_status()
@@ -452,233 +452,180 @@ def duckduckgo_search(query: str, limit: int = 5):
     except Exception as e:
 
         print(
-            f"[WEB DEBUG] DuckDuckGo request FAILED: "
+            f"[WEB ERROR] DuckDuckGo request failed: "
             f"{type(e).__name__}: {e}"
         )
 
-        raise
+        return []
 
-
-    # --------------------------------------------------------
-    # Parse HTML
-    # --------------------------------------------------------
 
     soup = BeautifulSoup(
         response.text,
         "html.parser"
     )
 
+
+    # --------------------------------------------------------
+    # DEBUG PAGE
+    # --------------------------------------------------------
+
     print(
-        f"[WEB DEBUG] Page title: "
+        f"[WEB] Page title: "
         f"{soup.title.get_text(strip=True) if soup.title else 'NONE'}"
     )
 
 
-    # Try multiple known result selectors.
-    result_blocks = soup.select(
-        "article[data-testid='result'], "
-        "div[data-testid='result'], "
-        "div.result, "
-        "div.web-result"
+    page_text = soup.get_text(
+        " ",
+        strip=True
     )
 
     print(
-        f"[WEB DEBUG] Result containers found: "
-        f"{len(result_blocks)}"
+        f"[WEB] Page text preview:\n"
+        f"{page_text[:500]}"
     )
 
 
     # --------------------------------------------------------
-    # If nothing was found, dump useful diagnostics
+    # Find links
     # --------------------------------------------------------
 
-    if not result_blocks:
+    links = soup.find_all(
+        "a",
+        href=True
+    )
 
-        print(
-            "[WEB DEBUG] NO RESULT CONTAINERS FOUND."
-        )
+    print(
+        f"[WEB] Total <a> elements: {len(links)}"
+    )
 
-        # Check whether DDG returned some kind of bot/challenge page.
-        page_text = soup.get_text(
-            " ",
-            strip=True
-        )
-
-        print(
-            "[WEB DEBUG] First 1000 chars of page text:"
-        )
-
-        print(
-            page_text[:1000]
-        )
-
-        print(
-            "\n[WEB DEBUG] Links found on page:"
-        )
-
-        links = soup.find_all(
-            "a",
-            href=True
-        )
-
-        print(
-            f"[WEB DEBUG] Total links: {len(links)}"
-        )
-
-        for link in links[:20]:
-
-            print(
-                "   ",
-                link.get_text(" ", strip=True)[:100],
-                "->",
-                link.get("href")
-            )
-
-        return []
-
-
-    # --------------------------------------------------------
-    # Extract results
-    # --------------------------------------------------------
 
     results = []
 
-    for index, result in enumerate(
-        result_blocks,
-        start=1
-    ):
+
+    for link in links:
 
         if len(results) >= limit:
             break
 
-        try:
 
-            # Current/common DDG title selectors
-            link = result.select_one(
-                "h2 a, "
-                "h3 a, "
-                "a.result__a"
-            )
+        title = link.get_text(
+            " ",
+            strip=True
+        )
 
-            if not link:
-
-                print(
-                    f"[WEB DEBUG] Result #{index}: "
-                    f"no title/link found"
-                )
-
-                continue
+        href = link.get(
+            "href",
+            ""
+        ).strip()
 
 
-            title = link.get_text(
-                " ",
-                strip=True
-            )
+        # Ignore useless links
+        if not title:
+            continue
 
-            href = link.get(
-                "href"
-            )
+        if not href:
+            continue
 
 
-            if not title or not href:
+        # ----------------------------------------------------
+        # Resolve DDG redirect
+        # ----------------------------------------------------
 
-                print(
-                    f"[WEB DEBUG] Result #{index}: "
-                    f"missing title or URL"
-                )
+        if href.startswith(
+            "//duckduckgo.com/l/"
+        ):
 
-                continue
-
-
-            # ------------------------------------------------
-            # Resolve DuckDuckGo redirect URLs
-            # ------------------------------------------------
-
-            if href.startswith(
-                "//duckduckgo.com/l/?"
-            ):
-
-                href = (
-                    "https:"
-                    + href
-                )
+            href = "https:" + href
 
 
-            parsed = urlparse(
-                href
-            )
+        parsed = urlparse(
+            href
+        )
 
-            query_params = parse_qs(
-                parsed.query
-            )
-
-            if "uddg" in query_params:
-
-                href = query_params[
-                    "uddg"
-                ][0]
+        params = parse_qs(
+            parsed.query
+        )
 
 
-            # ------------------------------------------------
-            # Snippet
-            # ------------------------------------------------
+        if "uddg" in params:
 
-            snippet_element = result.select_one(
-                "[data-result='snippet'], "
-                ".result__snippet"
-            )
-
-            snippet = (
-                snippet_element.get_text(
-                    " ",
-                    strip=True
-                )
-                if snippet_element
-                else ""
-            )
+            href = params[
+                "uddg"
+            ][0]
 
 
-            item = {
-                "title": title,
-                "url": href,
-                "description": snippet
-            }
+        # ----------------------------------------------------
+        # Only accept HTTP(S) URLs
+        # ----------------------------------------------------
 
-            results.append(
-                item
-            )
-
-            print(
-                f"[WEB DEBUG] Result #{len(results)}:"
-            )
-
-            print(
-                f"    Title: {title}"
-            )
-
-            print(
-                f"    URL:   {href}"
-            )
-
-            print(
-                f"    Snip:  {snippet[:200]}"
-            )
-
-
-        except Exception as e:
-
-            print(
-                f"[WEB DEBUG] Error parsing "
-                f"result #{index}: "
-                f"{type(e).__name__}: {e}"
-            )
+        if not href.startswith(
+            ("http://", "https://")
+        ):
 
             continue
 
 
+        # Don't accidentally grab DDG's own navigation links.
+        hostname = (
+            urlparse(href)
+            .hostname
+            or ""
+        ).lower()
+
+
+        if (
+            "duckduckgo.com"
+            in hostname
+        ):
+
+            continue
+
+
+        # ----------------------------------------------------
+        # Avoid duplicates
+        # ----------------------------------------------------
+
+        if any(
+            r["url"] == href
+            for r in results
+        ):
+
+            continue
+
+
+        result = {
+            "title": title,
+            "url": href,
+            "description": ""
+        }
+
+
+        results.append(
+            result
+        )
+
+
+        print(
+            f"[WEB] Found result #{len(results)}"
+        )
+
+        print(
+            f"      {title}"
+        )
+
+        print(
+            f"      {href}"
+        )
+
+
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
+
     print(
-        f"[WEB DEBUG] Final DDG results: "
-        f"{len(results)}"
+        f"[WEB] DuckDuckGo returned "
+        f"{len(results)} usable results"
     )
 
     print("=" * 60)
