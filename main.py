@@ -2585,7 +2585,7 @@ async def rita_search(ctx, *, query: str = ""):
                 search_results = await asyncio.to_thread(
                     LangSearchApiCall,
                     query.strip(),
-                    2   # top 2 results
+                    3   # top 3 results
                 )
 
                 if not search_results:
@@ -2646,7 +2646,7 @@ async def rita_search(ctx, *, query: str = ""):
                     augmented_prompt,
                     system_prompt,
                     list(channel_history),
-                    256
+                    512
                 )
 
                 final_reply = fix_rita_emotes(
@@ -2667,7 +2667,7 @@ async def rita_search(ctx, *, query: str = ""):
                 # Build a tiny sources footer
                 sources = "\n".join(
                     f"{i+1}. {r['name'][:60]}… <{r['url']}>"
-                    for i, r in enumerate(search_results[:2])
+                    for i, r in enumerate(search_results[:3])
                 )
 
                 await ctx.reply(
