@@ -1320,8 +1320,8 @@ async def rip(ctx, *, message: str = None):
     overlays = [
         {
             "source": avatar_bytes,
-            "x": 466,
-            "y": 321,
+            "x": 415,
+            "y": 293,
             "size": 250
         }
     ]
