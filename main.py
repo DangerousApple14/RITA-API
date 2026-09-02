@@ -1643,7 +1643,7 @@ async def how_smort(ctx, *, message: str = None):
         "Genius": [151, 200]
     }
 
-    if random.Random() <= 0.30:
+    if random.random() <= 0.30:
         iq_tiers = [iq_tiers["Slow"], iq_tiers["Genius"]]
     else:
         iq_tiers = [iq_tiers["Mid"], iq_tiers["Smart"]]
