@@ -535,6 +535,8 @@ conversation_history = collections.defaultdict(
 async def verify_and_clean_guilds():
     """Leaves servers where DANGY_ID is definitely not a member."""
 
+    init_database() # Also do this too while at it
+
     for guild in bot.guilds:
         try:
             await guild.fetch_member(DANGY_ID)
@@ -568,7 +570,6 @@ async def verify_and_clean_guilds():
 async def on_ready():
 
     await verify_and_clean_guilds()
-    init_database()
 
     activity = discord.Activity(
         type=discord.ActivityType.playing,
@@ -590,6 +591,7 @@ async def on_ready():
 @bot.event
 async def on_guild_join(guild: discord.Guild):
 
+    init_database()
     try:
         await guild.fetch_member(DANGY_ID)
 
@@ -1634,10 +1636,24 @@ async def random_fact(ctx):
 )
 async def how_smort(ctx, *, message: str = None):
 
-    if message is None:
-        result = f"You have {random.randint(10, 200)} IQ."
+    iq_tiers = {
+        "Slow": [67, 95],
+        "Mid": [96, 110],
+        "Smart": [111, 150],
+        "Genius": [151, 200]
+    }
+
+    if random.Random() <= 0.30:
+        iq_tiers = [iq_tiers["Slow"], iq_tiers["Genius"]]
     else:
-        result = f"{message} has {random.randint(10, 200)} IQ."
+        iq_tiers = [iq_tiers["Mid"], iq_tiers["Smart"]]
+
+    iq_range = iq_tiers[random.choice([0, 1])]
+
+    if message is None:
+        result = f"You have {random.randint(iq_range[0], iq_range[1])} IQ."
+    else:
+        result = f"{message} has {random.randint(iq_range[0], iq_range[1])} IQ."
 
     embed = discord.Embed(
         title=(
@@ -1830,9 +1846,6 @@ async def pp(ctx, *, user: str = None):
         ),
         color=discord.Colour.dark_red()
     )
-
-    print(f"nvidia: {NVIDIA_API_KEY}\nbot: {BOT_TOKEN}")
-
 
     await ctx.reply(embed=embed)
 
@@ -2072,7 +2085,7 @@ async def kill(ctx, *, message: str = None):
         random.choice(KILL_RESPONSES)
     )
 
-    # ============================================================
+# ============================================================
 # HELP COMMAND
 # ============================================================
 
@@ -2330,6 +2343,8 @@ AI_CD_MAX = 60 * 60 * 36
 @bot.command(name="config")
 @commands.has_permissions(administrator=True)
 async def config(ctx, *, msg: str = None):
+
+    await verify_and_clean_guilds()
 
     if not msg:
 
@@ -2666,7 +2681,7 @@ async def rita_search(ctx, *, query: str = ""):
                 # ── 4. Reply with sources ─────────────────────
                 # Build a tiny sources footer
                 sources = "\n".join(
-                    f"{i+1}. {r['name'][:60]}… <{r['url']}>"
+                    f"-# {i+1}. [{r['name'][:60]}…](<{r['url']}>)"
                     for i, r in enumerate(search_results[:3])
                 )
 
