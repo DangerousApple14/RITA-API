@@ -640,6 +640,21 @@ async def rita_ai(ctx, *, prompt: str = ""):
     guild_id = ctx.guild.id
     user_id = ctx.author.id
 
+    if ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            # Fetch the referenced message from the channel
+            referenced_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            replied_text = referenced_msg.content
+            reply_author = referenced_msg.author.display_name
+
+        except Exception as e:
+            print(f"Error fetching referenced message: {e}")
+            replied_text = None
+            reply_author = None
+
+    if replied_text and reply_author:
+        prompt = f"Have this as context: {reply_author} typed the following: {replied_text}\n {ctx.author.display_name} read {reply_author}'s message and asked you the following: {prompt}"
+
     # --------------------------------------------------------
     # Check per-server / per-user cooldown
     # --------------------------------------------------------
