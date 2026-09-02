@@ -1068,7 +1068,7 @@ async def ship(ctx, *, message: str):
     
     if not message or not msgIsPing(message):
 
-        await ctx.send(
+        await ctx.reply(
             f"Master, please provide two names for me to analyze "
             f"their compatibility~ "
             f"{RITA_EMOTES['RitaCurious']}"
@@ -1094,7 +1094,7 @@ async def ship(ctx, *, message: str):
 
     else:
 
-        await ctx.send(
+        await ctx.reply(
             f"Master, polygamy is not supported yet~ "
             f"{RITA_EMOTES['RitaCurious']}"
         )
@@ -1104,7 +1104,7 @@ async def ship(ctx, *, message: str):
 
     if u1 is None or u2 is None:
 
-        await ctx.send(
+        await ctx.reply(
             f"I could not properly identify both users, Master... "
             f"{RITA_EMOTES['RitaCurious']}"
         )
@@ -1145,7 +1145,7 @@ async def ship(ctx, *, message: str):
         size1 = 150
         size2 = 200
 
-        await ctx.send(
+        feedback = (
             f"Ara!... <@{couple[0]}> and <@{couple[1]}> "
             f"like to... Explore around, it seems... "
             f"{RITA_EMOTES['RitaDerp']}"
@@ -1159,7 +1159,7 @@ async def ship(ctx, *, message: str):
         size1 = 100
         size2 = 110
 
-        await ctx.send(
+        feedback = (
             f"Oh my, <@{couple[0]}> and <@{couple[1]}> "
             f"are so passionate together! "
             f"They should tone the PDA down a little... "
@@ -1174,7 +1174,7 @@ async def ship(ctx, *, message: str):
         size1 = 90
         size2 = 80
 
-        await ctx.send(
+        feedback = (
             f"Uh oh, <@{couple[0]}> and <@{couple[1]}> "
             f"seem to have a... Relationship that's a little "
             f"bit too much onesided... "
@@ -1189,7 +1189,7 @@ async def ship(ctx, *, message: str):
         size1 = 200
         size2 = 200
 
-        await ctx.send(
+        feedback = (
             f"Aw, <@{couple[0]}> and <@{couple[1]}> "
             f"are so lovely together! "
             f"{RITA_EMOTES['RitaCheers']}"
@@ -1203,7 +1203,7 @@ async def ship(ctx, *, message: str):
         size1 = 150
         size2 = 180
 
-        await ctx.send(
+        feedback = (
             f"Ooh, <@{couple[0]}> and <@{couple[1]}> "
             f"have a... Relationship full of drama! "
             f"{RITA_EMOTES['RitaChilling']}"
@@ -1217,7 +1217,7 @@ async def ship(ctx, *, message: str):
         size1 = 150
         size2 = 130
 
-        await ctx.send(
+        feedback = (
             f"Uh oh, <@{couple[0]}> and <@{couple[1]}> "
             f"seem to have a... Relationship that involves onesided rage-beating... "
             f"{RITA_EMOTES['RitaDerp']}"
@@ -1231,7 +1231,7 @@ async def ship(ctx, *, message: str):
         size1 = 80
         size2 = 90
 
-        await ctx.send(
+        feedback = (
             f"Ah, <@{couple[0]}> and <@{couple[1]}> "
             f"like to... Power play... "
             f"{RITA_EMOTES['RitaIsPityingYou']}"
@@ -1245,7 +1245,7 @@ async def ship(ctx, *, message: str):
         size1 = 200
         size2 = 150
 
-        await ctx.send(
+        feedback = (
             f"Ara! <@{couple[0]}> and <@{couple[1]}> "
             f"seem to have an... Obsessive dynamic... "
             f"{RITA_EMOTES['RitaThreatening']}"
@@ -1276,12 +1276,12 @@ async def ship(ctx, *, message: str):
 
         # 5. Process and send
         imageOverlays(f"{shipType}.jpg", overlays, "result.png")
-        await ctx.send(file=discord.File("result.png"))
+        await ctx.reply(content=feedback, file=discord.File("result.png"))
 
     except discord.NotFound:
-        await ctx.send("One or both user IDs could not be found, Master...")
+        await ctx.reply("One or both user IDs could not be found, Master...")
     except discord.HTTPException as e:
-        await ctx.send(f"An error occurred while fetching the users: `{e}`")
+        await ctx.reply(f"An error occurred while fetching the users: `{e}`")
 
 
 # ============================================================
