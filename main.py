@@ -661,7 +661,7 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
             if remaining > 0:
 
-                await ctx.send(
+                await ctx.reply(
                     f"Please exercise a moment of patience, Master... "
                     f"You must wait **{remaining:.1f} seconds** before "
                     f"asking me again. "
@@ -676,7 +676,7 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
     if ai_lock.locked():
 
-        await ctx.send(
+        await ctx.reply(
             f"Please exercise a moment of patience, Master... "
             f"Apple Sama is currently... Impecunious, and can't quite "
             f"afford better response rates. "
@@ -691,7 +691,7 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
     if not prompt.strip():
 
-        await ctx.send(
+        await ctx.reply(
             f"My, Master... you must provide something for me "
             f"to respond to. "
             f"{RITA_EMOTES['RitaCurious']}"
@@ -774,7 +774,7 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
                 print(f"NVIDIA HTTP error: {e}")
 
-                await ctx.send(
+                await ctx.reply(
                     f"Forgive me, Master... "
                     f"the NVIDIA service rejected my request. "
                     f"{RITA_EMOTES['RitaShocked']}"
@@ -784,13 +784,11 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
                 print(f"NVIDIA API error: {e}")
 
-                await ctx.send(
+                await ctx.reply(
                     f"Forgive me, Master... "
                     f"an error occurred while processing your request. "
                     f"{RITA_EMOTES['RitaIsPityingYou']}"
                 )
-
-# ctrl - f here later 
 
 # ============================================================
 # FORGET MEMORY
@@ -805,7 +803,7 @@ async def forget(ctx):
         ctx.channel.id
     ].clear()
 
-    await ctx.send(
+    await ctx.reply(
         f"My memory for this channel has been refreshed, Master~ "
         f"{RITA_EMOTES['RitaIsCleaning']}"
     )
@@ -918,7 +916,7 @@ async def tie(ctx, *, message: str):
         "me"
     ]:
 
-        await ctx.send(
+        await ctx.reply(
             f"{RITA_EMOTES['RitaThinkDerp']}"
         )
 
@@ -941,7 +939,7 @@ async def tie(ctx, *, message: str):
         return False
 
 
-    await ctx.send(
+    await ctx.reply(
         f"Ah, Master... you do enjoy teasing me, don't you? "
         f"{RITA_EMOTES['RitaShocked']}"
     )
@@ -1233,7 +1231,7 @@ async def ship(ctx, *, message: str):
 
         feedback = (
             f"Ah, <@{couple[0]}> and <@{couple[1]}> "
-            f"like to... Power play... "
+            f"are... Master and pet, it seems... "
             f"{RITA_EMOTES['RitaIsPityingYou']}"
         )
 
