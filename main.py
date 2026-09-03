@@ -1782,6 +1782,8 @@ async def how_cap(ctx):
 
     percentage = random.randint(0, 100)
 
+    target_reference = ctx.message.reference if ctx.message.reference else ctx.message 
+
     embed = discord.Embed(
         title="Cap Rate Machine",
         description=(
@@ -1790,7 +1792,7 @@ async def how_cap(ctx):
         color=discord.Colour.gold()
     )
 
-    await ctx.reply(embed=embed)
+    await ctx.send(embed=embed, reference=target_reference, mention_author=False)
 
 
 @bot.command(
