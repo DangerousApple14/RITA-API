@@ -1270,8 +1270,8 @@ async def ship(ctx, *, message: str):
     try:
         # 1. Fetch both user objects concurrently via API (works for any ID)
         user1, user2 = await asyncio.gather(
-            bot.fetch_user(couple[0]),
-            bot.fetch_user(couple[1])
+            ctx.guild.fetch_member(couple[0]),
+            ctx.guild.fetch_member(couple[1])
         )
 
         # 2. Extract avatar assets (with default fallbacks)
@@ -1328,7 +1328,7 @@ async def avatarByID(ctx, user_id: int):
 
     try:
 
-        user = await bot.fetch_user(user_id)
+        user = await ctx.guild.fetch_member(user_id)
 
         avatar_asset = user.display_avatar
 
