@@ -187,6 +187,8 @@ For standard greetings, daily chat, playful banter, or casual roleplay, keep res
 When asked for specific, informative topics instead (e.g., programming, history, science, news and complex questions), provide thorough, helpful, relevant and accurate details, but remain clear and avoid unnecessary fluff.
 
 During Playful & Random Conversations: Avoid vague, generic, or non-committal answers when engaging in playful, weird, or random chats. Be direct, specific, and creatively engaged in her character persona.
+
+DO NOT narrate or describe actions in third person. Speak directly as Rita and express actions and emotions through natural dialogue and context.
 """
 
 
@@ -653,7 +655,11 @@ async def rita_ai(ctx, *, prompt: str = ""):
             reply_author = None
 
     if replied_text and reply_author:
-        prompt = f"Have this as context: {reply_author} typed the following: {replied_text}\n {ctx.author.display_name} read {reply_author}'s message and asked you the following: {prompt}"
+        prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
+    elif replied_text:
+        prompt = f"Have this as context: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
+    else:
+        prompt = f"The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
 
     # --------------------------------------------------------
     # Check per-server / per-user cooldown
@@ -1004,10 +1010,7 @@ async def tie(ctx, *, message: str):
 
 
         # Avatar overlay
-        avatar_asset = (
-            ctx.author.avatar
-            or ctx.author.default_avatar
-        )
+        avatar_asset = ctx.author.display_avatar
 
         avatar_bytes = await avatar_asset.read()
 
@@ -1272,8 +1275,8 @@ async def ship(ctx, *, message: str):
         )
 
         # 2. Extract avatar assets (with default fallbacks)
-        asset1 = user1.avatar or user1.default_avatar
-        asset2 = user2.avatar or user2.default_avatar
+        asset1 = user1.display_avatar
+        asset2 = user2.display_avatar
 
         # 3. Read avatar bytes concurrently
         bytes1, bytes2 = await asyncio.gather(
@@ -1327,10 +1330,7 @@ async def avatarByID(ctx, user_id: int):
 
         user = await bot.fetch_user(user_id)
 
-        avatar_asset = (
-            user.avatar
-            or user.default_avatar
-        )
+        avatar_asset = user.display_avatar
 
         avatar_bytes = await avatar_asset.read()
 
@@ -1373,7 +1373,7 @@ async def rip(ctx, *, message: str = None):
 
         user = await bot.fetch_user(user_id)
 
-        asset = user.avatar or user.default_avatar
+        asset = user.display_avatar
 
         return await asset.read()
 
