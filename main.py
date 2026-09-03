@@ -654,10 +654,10 @@ async def rita_ai(ctx, *, prompt: str = ""):
             replied_text = ""
             reply_author = ""
 
-    if replied_text and reply_author:
-        prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
-    elif replied_text:
-        prompt = f"Have this as context: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
+        if replied_text and reply_author:
+            prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
+        elif replied_text:
+            prompt = f"Have this as context: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
     else:
         prompt = f"The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
 
