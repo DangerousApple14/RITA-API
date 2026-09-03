@@ -651,8 +651,8 @@ async def rita_ai(ctx, *, prompt: str = ""):
 
         except Exception as e:
             print(f"Error fetching referenced message: {e}")
-            replied_text = None
-            reply_author = None
+            replied_text = ""
+            reply_author = ""
 
     if replied_text and reply_author:
         prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
