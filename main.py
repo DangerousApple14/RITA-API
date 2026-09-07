@@ -160,7 +160,7 @@ def NvidiaApiCall(
         INVOKE_URL,
         headers=headers,
         json=payload,
-        timeout=30
+        timeout=60
     )
 
     response.raise_for_status()
@@ -2557,21 +2557,6 @@ async def rita_search(ctx, *, query: str = ""):
                 await ctx.reply(
                     f"Forgive me, Master... an error occurred while processing "
                     f"the search results. {RITA_EMOTES['RitaIsPityingYou']}"
-                )
-                await ctx.reply(f"Would you like the raw results? {RITA_EMOTES['RitaCurious']}")
-                try:
-                    response = await bot.wait_for(
-                        "message",
-                        check=approval,
-                        timeout=6.7
-                    )
-                    
-                except asyncio.TimeoutError:
-                    return
-
-                await ctx.reply(
-                    f"Very well, Master. Here are the raw results:\n"
-                    f"-# {search_context}"
                 )
 
 # ============================================================
