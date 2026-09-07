@@ -1551,9 +1551,10 @@ async def cup(ctx, *, user: str = None):
             f"{target} cup size is.... **{size}**.\n"
             f"Which is the same as... **{comparison}**."
         ),
-        footer="For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters.",
         color=discord.Colour.dark_red()
     )
+
+    embed.set_footer(text=f"For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters. {RITA_EMOTES['RitaIsSilentlyQuestioningYou']}")
 
     await ctx.reply(embed=embed)
 
