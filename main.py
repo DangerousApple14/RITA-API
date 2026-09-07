@@ -1649,20 +1649,6 @@ async def random_fact(ctx):
 )
 async def how_smort(ctx, *, message: str = None):
 
-    iq_tiers = {
-        "Slow": [67, 95],
-        "Mid": [96, 110],
-        "Smart": [111, 150],
-        "Genius": [151, 200]
-    }
-
-    if random.random() <= 0.30:
-        iq_tiers = [iq_tiers["Slow"], iq_tiers["Genius"]]
-    else:
-        iq_tiers = [iq_tiers["Mid"], iq_tiers["Smart"]]
-
-    iq_range = iq_tiers[random.choice([0, 1])]
-
     if message is None:
         result = f"You have {random.randint(iq_range[0], iq_range[1])} IQ."
     else:
