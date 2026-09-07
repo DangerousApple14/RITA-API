@@ -160,7 +160,7 @@ def NvidiaApiCall(
         INVOKE_URL,
         headers=headers,
         json=payload,
-        timeout=120
+        timeout=30
     )
 
     response.raise_for_status()
@@ -803,23 +803,6 @@ async def tie(ctx, *, message: str):
 
         return
 
-
-    def approval(message):
-
-        yes = [
-            "ye",
-            "confirm",
-            "do it"
-        ]
-
-        for ye in yes:
-
-            if ye in message.content.lower():
-                return True
-
-        return False
-
-
     await ctx.reply(
         f"Ah, Master... you do enjoy teasing me, don't you? "
         f"{RITA_EMOTES['RitaShocked']}"
@@ -830,9 +813,7 @@ async def tie(ctx, *, message: str):
         f"{RITA_EMOTES['RitaWillGrabYou']}"
     )
 
-
     try:
-
         response = await bot.wait_for(
             "message",
             check=approval,
@@ -840,7 +821,6 @@ async def tie(ctx, *, message: str):
         )
 
     except asyncio.TimeoutError:
-
         await ctx.send(
             f"Master, it seems you have changed your mind... "
             f"{RITA_EMOTES['RitaAww']}"
@@ -1554,7 +1534,7 @@ async def cup(ctx, *, user: str = None):
         color=discord.Colour.dark_red()
     )
 
-    embed.set_footer(text=f"For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters. {RITA_EMOTES['RitaIsSilentlyQuestioningYou']}")
+    embed.set_footer(text="For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters.")
 
     await ctx.reply(embed=embed)
 
@@ -2475,7 +2455,7 @@ async def rita_search(ctx, *, query: str = ""):
                 search_results = await asyncio.to_thread(
                     LangSearchApiCall,
                     query.strip(),
-                    3   # top 3 results
+                    5   # top 5 results
                 )
 
                 if not search_results:
@@ -2557,7 +2537,7 @@ async def rita_search(ctx, *, query: str = ""):
                 # Build a tiny sources footer
                 sources = "\n".join(
                     f"-# {i+1}. [{r['name'][:60]}…](<{r['url']}>)"
-                    for i, r in enumerate(search_results[:3])
+                    for i, r in enumerate(search_results[:5])
                 )
 
                 await ctx.reply(
@@ -2567,16 +2547,31 @@ async def rita_search(ctx, *, query: str = ""):
 
             except requests.HTTPError as e:
                 print(f"NVIDIA HTTP error: {e}")
-                await ctx.send(
+                await ctx.reply(
                     f"Forgive me, Master... the AI service rejected my request. "
                     f"{RITA_EMOTES['RitaShocked']}"
                 )
 
             except Exception as e:
                 print(f"NVIDIA API error: {e}")
-                await ctx.send(
+                await ctx.reply(
                     f"Forgive me, Master... an error occurred while processing "
                     f"the search results. {RITA_EMOTES['RitaIsPityingYou']}"
+                )
+                await ctx.reply(f"Would you like the raw results? {RITA_EMOTES['RitaCurious']}")
+                try:
+                    response = await bot.wait_for(
+                        "message",
+                        check=approval,
+                        timeout=6.7
+                    )
+                    
+                except asyncio.TimeoutError:
+                    return
+
+                await ctx.reply(
+                    f"Very well, Master. Here are the raw results:\n"
+                    f"-# {search_context}"
                 )
 
 # ============================================================

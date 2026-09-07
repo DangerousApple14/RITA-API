@@ -3,6 +3,21 @@ import re
 
 # FUNCTIONS
 
+def approval(message):
+
+    yes = [
+        "ye",
+        "confirm",
+        "do it"
+    ]
+
+    for ye in yes:
+
+        if ye in message.content.lower():
+            return True
+
+    return False
+
 def get_iq():
     iq_tiers = {
         "Slow": [67, 95],
