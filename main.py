@@ -2686,7 +2686,7 @@ async def pvp(ctx, *, message: str = None):
                 actions[pid] = random.choice(list(ACTION_EMOJIS.values()))
                 events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} hesitated and flailed randomly!")
 
-        # 1) harden attempts
+        # harden attempts
         for pid in (uid1, uid2):
             if actions[pid] != "harden":
                 continue
@@ -2700,7 +2700,7 @@ async def pvp(ctx, *, message: str = None):
                 actions[pid] = "attack"
                 events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} tried to harden but isn't aroused enough... attacks instead!")
 
-        # 2) segs — both arousal reset, LESS aroused one takes the difference as sex damage
+        # segs — both arousal reset, LESS aroused one takes the difference as sex damage
         if "segs" in actions.values():
             diff = abs(arousal[uid1] - arousal[uid2])
             if diff == 0:
@@ -2713,7 +2713,7 @@ async def pvp(ctx, *, message: str = None):
                 events.append(f"💦 SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
             arousal[uid1] = arousal[uid2] = 0
 
-        # 3) attacks (dodge happens passively inside calc_attack)
+        # attacks (dodge happens passively inside calc_attack)
         for pid in (uid1, uid2):
             if actions[pid] != "attack":
                 continue
@@ -2731,7 +2731,7 @@ async def pvp(ctx, *, message: str = None):
                 hp[opp] = max(0, hp[opp] - dmg)
                 events.append(f"{RITA_EMOTES['RitaSmile']} {names[pid]} hits {names[opp]} for {dmg:.1f}{' **CRIT!**' if crit else ''}")
 
-        # 4) passive arousal from the opponent's assets
+        # passive arousal from the opponent's assets
         for pid in (uid1, uid2):
             opp = uid2 if pid == uid1 else uid1
             before = arousal[pid]
@@ -2739,7 +2739,7 @@ async def pvp(ctx, *, message: str = None):
             if before < HARDEN_AT <= arousal[pid]:
                 events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} is getting flustered... they can HARDEN now!")
 
-        # 5) status + win check
+        # status + win check
         battle_embed = discord.Embed(
             title=f"⚔️ Battle Status — Round {round_num}",
             description=(
