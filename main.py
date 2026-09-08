@@ -478,6 +478,21 @@ async def on_guild_join(guild: discord.Guild):
             f"Keeping the bot for now."
         )
 
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    cleaned_msg = message.content.strip().lower()
+
+    if cleaned_msg == "ok":
+        try:
+            await message.add_reaction("<:MEI:1546917211019550820>")
+        except discord.HTTPException:
+            print("Failed to add reaction idk.")
+
+    await bot.process_commands(message)
+
 # ============================================================
 # AI COOLDOWNS
 # ============================================================
@@ -2563,52 +2578,203 @@ async def rita_search(ctx, *, query: str = ""):
 # PvP COMMAND
 # ============================================================
 
-@bot.command(
-    name="pvp",
-    aliases=["fight", "battle"]
-)
+@bot.command(name="pvp", aliases=["fight", "battle"])
 async def pvp(ctx, *, message: str = None):
-
-    id = None
-
-    if not message:
+    if not message or not has_user_ping(message):
         await ctx.reply(f"Master, you need to tag who you want to fight... {RITA_EMOTES['RitaCurious']}")
         return
-    elif has_user_ping(message):
+
+    target_id = int(extract_user_id(message))
+    if target_id == ctx.author.id:
+        await ctx.reply(f"Master, that's just self-harm... {RITA_EMOTES['RitaCurious']}")
+        return
+    try:
+        target_member = await ctx.guild.fetch_member(target_id)
+    except Exception:
+        await ctx.reply(f"Master, I can't find that user in this server... {RITA_EMOTES['RitaCurious']}")
+        return
+    if target_member.bot:
+        await ctx.reply(f"Master, I won't let you bully my kind... {RITA_EMOTES['RitaCri']}")
+        return
+
+    # ---- challenge / accept ----
+    challenge_msg = await ctx.reply(
+        f"{target_member.mention}, Master {ctx.author.display_name} has challenged you to a duel! "
+        f"React with any emoji within 15 seconds to accept."
+    )
+
+    def reaction_approval(reaction, user):
+        return reaction.message.id == challenge_msg.id and user.id == target_id
+
+    try:
+        await bot.wait_for("reaction_add", check=reaction_approval, timeout=15.0)
+    except asyncio.TimeoutError:
+        await ctx.send(
+            f"Master {ctx.author.display_name}, your challenge to {target_member.display_name} has expired. "
+            f"They did not react in time. {RITA_EMOTES['RitaCri']}"
+        )
+        return
+
+    await challenge_msg.add_reaction("✅")
+
+    # ---- optional custom stats: "pvp @user hp 250 arousal 30" ----
+    hp_m = re.search(r"\bhp\s+(\d+)", message.lower())
+    ar_m = re.search(r"\barousal\s+(\d+)", message.lower())
+    custom_hp = max(10, min(999, int(hp_m.group(1)))) if hp_m else 100
+    custom_arousal = max(0, min(AROUSAL_MAX, int(ar_m.group(1)))) if ar_m else 0
+
+    user1 = PvP(ctx.author.id, custom_hp, custom_arousal)
+    user2 = PvP(target_id, custom_hp, custom_arousal)
+
+    uid1, uid2 = ctx.author.id, target_id
+    fighters = {uid1: user1, uid2: user2}
+    names = {uid1: ctx.author.display_name, uid2: target_member.display_name}
+    mentions = {uid1: ctx.author.mention, uid2: target_member.mention}
+    hp = {uid1: user1.stats["Initial HP"], uid2: user2.stats["Initial HP"]}
+    max_hp = dict(hp)
+    arousal = {uid1: user1.stats["Initial Arousal"], uid2: user2.stats["Initial Arousal"]}
+    hardened = {uid1: False, uid2: False}
+    dodge_streak = {uid1: 0, uid2: 0}
+
+    def stats_embed(fighter, member, color):
+        s = fighter.stats
+        return discord.Embed(
+            title=f"{member.display_name}'s Stats",
+            description=(
+                f"Chromosomes: **{s['Chromosomes']}**\n"
+                f"Gay: **{s['Gay']:.0%}**\n"
+                f"IQ: **{s['IQ']}**\n"
+                f"Body Fat %: **{s['Body Fat %']}%**\n"
+                f"Giga Chad Rate (Mooscles): **{s['Giga Chad Rate (Mooscles)']:.0%}**\n"
+                f"Cup Size: **{s['Cup Size'] or '-'}** *{s['Cup Size Comparison'] if s['Cup Size'] else ''}*\n"
+                f"PP Size: **{s['PP Size']} cm**\n"
+                f"HP: **{s['Initial HP']}** | Arousal: **{s['Initial Arousal']}**"
+            ),
+            color=color,
+        )
+
+    await ctx.send(f"{mentions[uid1]} vs {mentions[uid2]}... it begins. {RITA_EMOTES['RitaMenacingA']}")
+    status = await ctx.send(embed=stats_embed(user1, ctx.author, discord.Colour.blue()))
+    await asyncio.sleep(5)
+    await status.edit(embed=stats_embed(user2, target_member, discord.Colour.red()))
+    await asyncio.sleep(5)
+
+    def hp_bar(pid):
+        filled = max(0, min(10, round(hp[pid] / max_hp[pid] * 10)))
+        return "🟩" * filled + "🟥" * (10 - filled)
+
+    def arousal_bar(value):
+        filled = max(0, min(10, int(value / AROUSAL_MAX * 10)))
+        return "🟪" * filled + "⬜" * (10 - filled)
+
+    battle_msg = await ctx.send(embed=discord.Embed(title="⚔️ The battle begins!", color=discord.Colour.green()))
+    prompt_msg = await ctx.send(
+        f"React to choose your action ({ACTION_TIMEOUT}s per round):\n"
+        f"{RITA_EMOTES['RitaMenacing']} Attack\n"
+        f"{RITA_EMOTES['RitaSurprised']} Harden (needs {HARDEN_AT}+ arousal)\n"
+        f"{RITA_EMOTES['RitaMiddleFinger']} Segs"
+    )
+
+    winner = None
+    for round_num in range(1, MAX_ROUNDS + 1):
+        actions = await get_actions(prompt_msg, (uid1, uid2))
+        events = []
+
+        # players who didn't react panic
+        for pid in (uid1, uid2):
+            if pid not in actions:
+                actions[pid] = random.choice(list(ACTION_EMOJIS.values()))
+                events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} hesitated and flailed randomly!")
+
+        # 1) harden attempts
+        for pid in (uid1, uid2):
+            if actions[pid] != "harden":
+                continue
+            if hardened[pid]:
+                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} is already rock solid! (wasted turn)")
+            elif arousal[pid] >= HARDEN_AT:
+                hardened[pid] = True
+                asset = "nipples" if fighters[pid].stats["Chromosomes"] == "XX" else "boner"
+                events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} {names[pid]} HARDENS! Their {asset} now buffs them!")
+            else:
+                actions[pid] = "attack"
+                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} tried to harden but isn't aroused enough... attacks instead!")
+
+        # 2) segs — both arousal reset, LESS aroused one takes the difference as sex damage
+        if "segs" in actions.values():
+            diff = abs(arousal[uid1] - arousal[uid2])
+            if diff == 0:
+                events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} They went for segs perfectly in sync... balanced. Nothing happens!")
+            else:
+                victim = uid1 if arousal[uid1] < arousal[uid2] else uid2
+                other = uid2 if victim == uid1 else uid1
+                dmg = calc_sex_damage(fighters[victim], fighters[other].stats["Chromosomes"], diff)
+                hp[victim] = max(0, hp[victim] - dmg)
+                events.append(f"💦 SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
+            arousal[uid1] = arousal[uid2] = 0
+
+        # 3) attacks (dodge happens passively inside calc_attack)
+        for pid in (uid1, uid2):
+            if actions[pid] != "attack":
+                continue
+            opp = uid2 if pid == uid1 else uid1
+            if hp[pid] <= 0 or hp[opp] <= 0:
+                continue
+            dmg, crit, dodged = calc_attack(
+                fighters[pid], fighters[opp], hardened[pid], hardened[opp], dodge_streak[opp]
+            )
+            if dodged:
+                dodge_streak[opp] += 1
+                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[opp]} dodged {names[pid]}'s attack!")
+            else:
+                dodge_streak[opp] = 0
+                hp[opp] = max(0, hp[opp] - dmg)
+                events.append(f"{RITA_EMOTES['RitaSmile']} {names[pid]} hits {names[opp]} for {dmg:.1f}{' **CRIT!**' if crit else ''}")
+
+        # 4) passive arousal from the opponent's assets
+        for pid in (uid1, uid2):
+            opp = uid2 if pid == uid1 else uid1
+            before = arousal[pid]
+            arousal[pid] = min(AROUSAL_MAX, arousal[pid] + calc_passive_arousal(fighters[pid], fighters[opp], hardened[pid]))
+            if before < HARDEN_AT <= arousal[pid]:
+                events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} is getting flustered... they can HARDEN now!")
+
+        # 5) status + win check
+        battle_embed = discord.Embed(
+            title=f"⚔️ Battle Status — Round {round_num}",
+            description=(
+                f"**{names[uid1]}** — HP {hp[uid1]:.0f}/{max_hp[uid1]} {hp_bar(uid1)}\n"
+                f"Arousal {arousal[uid1]:.0f}/{AROUSAL_MAX}{' 🔥hardened' if hardened[uid1] else ''} {arousal_bar(arousal[uid1])}\n\n"
+                f"**{names[uid2]}** — HP {hp[uid2]:.0f}/{max_hp[uid2]} {hp_bar(uid2)}\n"
+                f"Arousal {arousal[uid2]:.0f}/{AROUSAL_MAX}{' 🔥hardened' if hardened[uid2] else ''} {arousal_bar(arousal[uid2])}\n\n"
+                + "\n".join(events[-6:])
+            ),
+            color=discord.Colour.green(),
+        )
+        await battle_msg.edit(embed=battle_embed)
+
+        if hp[uid1] <= 0 and hp[uid2] <= 0:
+            winner = "draw"; break
+        if hp[uid2] <= 0:
+            winner = uid1; break
+        if hp[uid1] <= 0:
+            winner = uid2; break
+
+        # reset reactions for next round; if no perms, make a fresh prompt
         try:
-            id = extract_user_id(message)
-            ctx.guild.fetch_member(id)
-        except Exception:
-            await ctx.reply(f"Master, I can't find that user in this server... {RITA_EMOTES['RitaCurious']}")
-            return
+            await prompt_msg.clear_reactions()
+        except discord.HTTPException:
+            prompt_msg = await ctx.send("*next round — react here:*")
 
-    class PvP:
-        def __init__(self, user_id):
-            self.user_id = user_id
+    # timeout cap -> whoever has more HP left wins
+    if winner is None:
+        f1, f2 = hp[uid1] / max_hp[uid1], hp[uid2] / max_hp[uid2]
+        winner = uid1 if f1 > f2 else uid2 if f2 > f1 else "draw"
 
-            stats = {
-                "Chromosomes": random.choice(["XX", "XY"]),
-                "Gay": random.random(),
-                "IQ": get_iq(),
-                "Body Fat %": get_fat_rate(stats["Chromosomes"]),
-                "Giga Chad Rate (Mooscles)": random.random(),
-                "Cup Size": get_cup_size()[0] if stats["Chromosomes"] == "XX" else 0,
-                "pvpCup": get_cup_size(cup = stats["Cup Size"])[0] if stats["Chromosomes"] == "XX" else 0,
-                "Cup Size Comparison": get_cup_size(PvP = True)[1] if stats["Chromosomes"] == "XX" else 0,
-                "PP Size": random.randint(2, 31) if stats["Chromosomes"] == "XY" else 0,
-                "pvpPP": stats["PP Size"]/31 if stats["Chromosomes"] == "XY" else 0,
-                "Initial HP": int(message.lower().split("hp ")[1]) if "hp " in message.lower() else 100,
-                "Initial Arousal": int(message.lower().split("arousal ")[1]) if "arousal " in message.lower() else 0  
-            }
-
-            self.stats = stats
-
-    user1 = PvP(ctx.author.id)
-    user2 = PvP(id)
-
-    # W I P
-    
-
+    if winner == "draw":
+        await ctx.send(f"Both masters collapse simultaneously... it's a draw. {RITA_EMOTES['RitaCri']}")
+    else:
+        await ctx.send(f"🏆 {mentions[winner]} wins the duel! {RITA_EMOTES['RitaCheers']}")
 
 # ============================================================
 # START BOT

@@ -1,5 +1,8 @@
-import random
 import re
+import random
+import asyncio
+import discord
+from main import bot, RITA_EMOTES
 
 # FUNCTIONS
 
@@ -18,6 +21,13 @@ def approval(message):
 
     return False
 
+def has_user_ping(text: str) -> bool:
+    return bool(re.search(r"<@!?\d{17,20}>", text))
+
+def extract_user_id(text: str):
+    match = re.search(r"<@!?(\d{17,20})>", text)
+    return match.group(1) if match else None
+
 def get_iq():
     iq_tiers = {
         "Slow": [67, 95],
@@ -25,83 +35,158 @@ def get_iq():
         "Smart": [111, 150],
         "Genius": [151, 200]
     }
-
     if random.random() <= 0.30:
-        iq_tiers = [iq_tiers["Slow"], iq_tiers["Genius"]]
+        pool = [iq_tiers["Slow"], iq_tiers["Genius"]]
     else:
-        iq_tiers = [iq_tiers["Mid"], iq_tiers["Smart"]]
-
-    iq_range = iq_tiers[random.choice([0, 1])]
+        pool = [iq_tiers["Mid"], iq_tiers["Smart"]]
+    iq_range = pool[random.choice([0, 1])]
     return random.randint(iq_range[0], iq_range[1])
 
 def get_fat_rate(chromosomes: str = None):
     if chromosomes is None:
         return random.randint(12, 40)
+    return random.randint(15, 50) if chromosomes == "XX" else random.randint(6, 45)
 
-    if chromosomes == "XX":
-        fat_rate = random.randint(15, 50)
-    else:
-        fat_rate = random.randint(6, 45)
-
-    return fat_rate
-
-def get_cup_size(PvP: bool = False, cup: str = None):
-
+def get_cup_size(cup: str = None):
     sizes = {
-    "AAA": 0.03,
-    "AA": 0.08,
-    "A": 0.14,
-    "B": 0.19,
-    "C": 0.21,
-    "D": 0.28,
-    "E": 0.37,
-    "F": 0.47,
-    "G": 0.54,
-    "H": 0.60,
-    "I": 0.67,
-    "J": 0.74,
-    "K": 0.80,
-    "L": 0.87,
-    "M": 0.93,
-    "N": 1.00
+        "AAA": 0.03, "AA": 0.08, "A": 0.14, "B": 0.19, "C": 0.21, "D": 0.28,
+        "E": 0.37, "F": 0.47, "G": 0.54, "H": 0.60, "I": 0.67, "J": 0.74,
+        "K": 0.80, "L": 0.87, "M": 0.93, "N": 1.00
     }
-
     sizes_v = [
-        "Fu Hua",
-        "Griseo / Teri",
-        "Lily / Roza / Bronya",
-        "Asuka",
-        "Mobius",
-        "Seele",
-        "Veliona",
-        "a little bigger than Veliona",
-        "Kiana / Kallen",
-        "Felis / Carole / Sushang",
-        "Himeko / Durandal",
-        "Raven / Rita",
-        "Sakura / Mommy Bronya",
-        "Mei",
-        "Aponia / Elysia / Eden / APHO Mei",
+        "Fu Hua", "Griseo / Teri", "Lily / Roza / Bronya", "Asuka", "Mobius",
+        "Seele", "Veliona", "a little bigger than Veliona", "Kiana / Kallen",
+        "Felis / Carole / Sushang", "Himeko / Durandal", "Raven / Rita",
+        "Sakura / Mommy Bronya", "Mei", "Aponia / Elysia / Eden / APHO Mei",
         "HOLY SHIET YOU HAVE THE SAME SIZE AS TIMIDO?!"
     ]
+    if cup is None:
+        cup = random.choice(list(sizes.keys()))
+    return sizes[cup], sizes_v[list(sizes.keys()).index(cup)]
 
-    if not PvP:
-        size = random.choice(list(sizes.keys()))
-        return size, sizes_v[list(sizes.keys()).index(size)]
+# ============================ PvP consts ============================
 
-    if cup is not None:
-        return sizes[cup], sizes_v[list(sizes.keys()).index(cup)]
+HARDEN_AT = 50
+AROUSAL_MAX = 100
+ACTION_TIMEOUT = 20 # seconds per round
+MAX_ROUNDS = 25
 
-    size = random.choice(list(sizes.values()))
-    return size, sizes_v[list(sizes.values()).index(size)]
+ACTION_EMOJIS = {
+    RITA_EMOTES["RitaMenacing"]: "attack",
+    RITA_EMOTES["RitaSurprised"]: "harden",
+    RITA_EMOTES["RitaMiddleFinger"]: "segs",
+}
 
-import re
+class PvP:
+    def __init__(self, user_id, hp, arousal):
+        self.user_id = user_id
 
-def has_user_ping(text: str) -> bool:
-    return bool(re.search(r"<@\d{17,20}>", text))
+        chromosomes = random.choice(["XX", "XY"])
+        cup = get_cup_size()[0] if chromosomes == "XX" else None
+        pp = random.randint(2, 31) if chromosomes == "XY" else 0
 
-def extract_user_id(text: str) -> str:
-    return match.group(1) if (match := re.search(r"<@(\d{18})>", text)) else None
+        self.stats = {
+            "Chromosomes": chromosomes,
+            "Gay": random.random(),
+            "IQ": get_iq(),
+            "Body Fat %": get_fat_rate(chromosomes),
+            "Giga Chad Rate (Mooscles)": random.random(),
+            "Cup Size": cup if cup else 0,
+            "pvpCup": get_cup_size(cup=cup)[0] if cup else 0,
+            "Cup Size Comparison": get_cup_size(cup=cup)[1] if cup else "-",
+            "PP Size": pp,
+            "pvpPP": pp / 31 if chromosomes == "XY" else 0,
+            "Initial HP": hp,
+            "Initial Arousal": arousal,
+        }
+
+def attraction_of(fighter, other_chromosomes):
+    """0..1 — how much `fighter` is attracted to a given sex, based on their Gay %."""
+    gay = fighter.stats["Gay"]
+    if other_chromosomes == fighter.stats["Chromosomes"]:
+        return gay          # same sex  -> attraction = gay%
+    return 1 - gay          # opposite  -> attraction = straightness
+
+def calc_attack(attacker, defender, atk_hardened, def_hardened, def_dodge_streak):
+    """-> (damage, crit, dodged)"""
+    a, d = attacker.stats, defender.stats
+
+    # dodge: IQ helps, fat hurts (no agility). Streak rate-limits chain dodging.
+    dodge = 0.05 + d["IQ"] / 500 - d["Body Fat %"] / 250
+    dodge *= 0.6 ** def_dodge_streak
+    # hardened XX cup dazzles attracted opponents (they dodge less)
+    if atk_hardened and a["Chromosomes"] == "XX":
+        dodge *= 1 - 0.5 * attraction_of(defender, "XX")
+    # hardened XX also dodges more personally
+    if def_hardened and d["Chromosomes"] == "XX":
+        dodge += 0.10
+    dodge = max(0.02, min(0.45, dodge))
+
+    if random.random() < dodge:
+        return 0, False, True
+
+    # mooscles = power, boner = extra power
+    dmg = 5 + a["Giga Chad Rate (Mooscles)"] * 20
+    if a["Chromosomes"] == "XY":
+        dmg *= 1 + a["pvpPP"] * (0.6 if atk_hardened else 0.3)
+
+    # tank: fat soaks strikes
+    dmg *= 1 - min(0.5, d["Body Fat %"] / 200)
+
+    # crit chance scales with IQ (+bonus vs cup-dazzled victims)
+    crit_chance = a["IQ"] / 400
+    if atk_hardened and a["Chromosomes"] == "XX":
+        crit_chance += 0.10 * attraction_of(defender, "XX")
+    crit = random.random() < min(0.6, crit_chance)
+    if crit:
+        dmg *= 1.75
+
+    return dmg, crit, False
+
+def calc_sex_damage(target, attacker_chromosomes, raw):
+    """Gay %: x% less sex dmg from same sex, (100-x)% MORE from opposite. IQ helps a lil."""
+    gay = target.stats["Gay"]
+    same_sex = attacker_chromosomes == target.stats["Chromosomes"]
+    mult = (1 - gay) if same_sex else (1 + (1 - gay))
+    mult *= 1 - min(0.25, target.stats["IQ"] / 800)
+    return raw * mult
+
+def calc_passive_arousal(fighter, opponent, is_hardened):
+    """Passive per-round arousal caused by the opponent's assets."""
+    o = opponent.stats
+    attracted = attraction_of(fighter, o["Chromosomes"])
+    asset = o["pvpCup"] if o["Chromosomes"] == "XX" else o["pvpPP"]
+    gain = asset * 15 * attracted
+    gain *= 1 - min(0.5, fighter.stats["Body Fat %"] / 200)  # aromatase tanking testosterone
+    if is_hardened:
+        gain *= 0.5                                          # hardening calms you slightly
+    return gain
+
+async def get_actions(prompt_msg, ids, timeout=ACTION_TIMEOUT):
+    """Wait for both players to react with an action emoji -> {user_id: action}"""
+    choices = {}
+
+    def check(reaction, user):
+        return (
+            reaction.message.id == prompt_msg.id
+            and user.id in ids
+            and user.id not in choices
+            and str(reaction.emoji) in ACTION_EMOJIS
+        )
+
+    for emoji in ACTION_EMOJIS:
+        try:
+            await prompt_msg.add_reaction(emoji)
+        except discord.HTTPException:
+            pass
+
+    try:
+        while len(choices) < 2:
+            reaction, user = await bot.wait_for("reaction_add", check=check, timeout=timeout)
+            choices[user.id] = ACTION_EMOJIS[str(reaction.emoji)]
+    except asyncio.TimeoutError:
+        pass
+    return choices
 
 # VARIABLES/CONSTANTS
 
@@ -239,4 +324,6 @@ RITA_EMOTES = {
     "RitaIsSilentlyQuestioningYou": "<:RitaIsSilentlyQuestioningYou:1540298959183028394>",
     "RitaIsPityingYou": "<:RitaIsPityingYou:1540298957421543425>",
     "RitaMiddleFinger": "<:RitaMiddleFinger:1540298956209127484>",
+    "RitaChuckle": "<:RitaChuckle:1546917207710244894>",
+    "RitaSmile": "<:RitaSmile:1546917209258070097>"
 }
