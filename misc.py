@@ -240,7 +240,7 @@ def make_turn_view(acting_pid, acting_name):
     view = discord.ui.View(timeout=ACTION_TIMEOUT)
     choice = {"action": None}
 
-    async def make_cb(action):
+    def make_cb(action):
         async def cb(interaction: discord.Interaction):
             if interaction.user.id != acting_pid:
                 await interaction.response.send_message("It's not your turn, baka!", ephemeral=True)
