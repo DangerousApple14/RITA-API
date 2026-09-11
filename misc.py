@@ -106,6 +106,7 @@ def get_fat_rate(chromosomes: str = None):
     return random.randint(15, 50) if chromosomes == "XX" else random.randint(6, 45)
 
 def get_cup_size(cup: str = None):
+    """-> (letter, value, description). Rolls a random one if cup is None."""
     sizes = {
         "AAA": 0.03, "AA": 0.08, "A": 0.14, "B": 0.19, "C": 0.21, "D": 0.28,
         "E": 0.37, "F": 0.47, "G": 0.54, "H": 0.60, "I": 0.67, "J": 0.74,
@@ -120,7 +121,7 @@ def get_cup_size(cup: str = None):
     ]
     if cup is None:
         cup = random.choice(list(sizes.keys()))
-    return sizes[cup], sizes_v[list(sizes.keys()).index(cup)]
+    return cup, sizes[cup], sizes_v[list(sizes.keys()).index(cup)]
 
 # ============================ PvP consts ============================
 
@@ -144,8 +145,12 @@ class PvP:
         self.user_id = user_id
 
         chromosomes = random.choice(["XX", "XY"])
-        cup = get_cup_size()[0] if chromosomes == "XX" else None
         pp = random.randint(2, 31) if chromosomes == "XY" else 0
+
+        if chromosomes == "XX":
+            cup, cup_val, cup_desc = get_cup_size()
+        else:
+            cup, cup_val, cup_desc = None, 0, "-"
 
         self.stats = {
             "Chromosomes": chromosomes,
@@ -153,9 +158,9 @@ class PvP:
             "IQ": get_iq(),
             "Body Fat %": get_fat_rate(chromosomes),
             "Giga Chad Rate (Mooscles)": random.random(),
-            "Cup Size": cup if cup else 0,
-            "pvpCup": get_cup_size(cup=cup)[0] if cup else 0,
-            "Cup Size Comparison": get_cup_size(cup=cup)[1] if cup else "-",
+            "Cup Size": cup or 0,
+            "pvpCup": cup_val,
+            "Cup Size Comparison": cup_desc,
             "PP Size": pp,
             "pvpPP": pp / 31 if chromosomes == "XY" else 0,
             "Initial HP": hp,
