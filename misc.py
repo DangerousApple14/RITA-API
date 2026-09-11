@@ -57,7 +57,9 @@ RITA_EMOTES = {
     "RitaIsPityingYou": "<:RitaIsPityingYou:1540298957421543425>",
     "RitaMiddleFinger": "<:RitaMiddleFinger:1540298956209127484>",
     "RitaChuckle": "<:RitaChuckle:1546917207710244894>",
-    "RitaSmile": "<:RitaSmile:1546917209258070097>"
+    "RitaSmile": "<:RitaSmile:1546917209258070097>",
+    "RitaSurprised": "<:RitaSurprised:1547263225093947483>",
+    "MEI": "<:MEI:1546917211019550820>"
 }
 
 # FUNCTIONS
