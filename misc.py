@@ -2,7 +2,63 @@ import re
 import random
 import asyncio
 import discord
-from main import bot, RITA_EMOTES
+from discord.ext import commands
+
+# ============================================================
+# DISCORD SETUP
+# ============================================================
+
+def get_case_insensitive_prefix(bot, message):
+
+    prefix = "rita "
+
+    if message.content.lower().startswith(prefix):
+        return message.content[:len(prefix)]
+
+    return prefix
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix=get_case_insensitive_prefix,
+    intents=intents,
+    case_insensitive=True
+)
+
+# ============================================================
+# DISCORD EMOTES
+# ============================================================
+
+RITA_EMOTES = {
+    "RitaStare": "<:RitaStare:1540086407278764192>",
+    "RitaShocked": "<:RitaShocked:1540086406087704596>",
+    "RitaThreatening": "<:RitaThreatening:1540086404934012968>",
+    "RitaDeathStare": "<:RitaDeathStare:1540086403751346176>",
+    "RitaIsCleaning": "<a:RitaIsCleaning:1540086401587216385>",
+    "RitaSmoch": "<:RitaSmooch:1540086400295370885>",
+    "RitaCurious": "<:RitaCurious:1540086397908688907>",
+    "RitaAww": "<:RitaAww:1540086395945885756>",
+    "RitaCry": "<:RitaCri:1540084497725268008>",
+    "RitaCheers": "<:RitaCheers:1540084495854870549>",
+    "RitaChilling": "<a:RitaChilling:1540083880155938916>",
+    "RitaMad": "<:RitaMad:1540036342212198420>",
+    "RitaMenacing": "<:RitaMenacing:1540036338886377482>",
+    "RitaSmug": "<:RitaSmug:1540036259983003698>",
+    "RitaMadScreamin": "<:RitaMadScreamin:1540298974915731466>",
+    "RitaMakesOutWithDudu": "<:RitaMakesOutWithDudu:1540298972088901682>",
+    "RitaThinkDerp": "<:RitaThinkDerp:1540298970520354916>",
+    "RitaLikesIt": "<a:RitaLikesIt:1540298969077252177>",
+    "RitaMenacingA": "<a:RitaMenacingA:1540298967693131847>",
+    "RitaCaughtYouIn4K": "<a:RitaCaughtYouIn4K:1540298964665110558>",
+    "RitaDerp": "<:RitaDerp:1540298962538467339>",
+    "RitaWillGrabYou": "<:RitaWillGrabYou:1540298960558628934>",
+    "RitaIsSilentlyQuestioningYou": "<:RitaIsSilentlyQuestioningYou:1540298959183028394>",
+    "RitaIsPityingYou": "<:RitaIsPityingYou:1540298957421543425>",
+    "RitaMiddleFinger": "<:RitaMiddleFinger:1540298956209127484>",
+    "RitaChuckle": "<:RitaChuckle:1546917207710244894>",
+    "RitaSmile": "<:RitaSmile:1546917209258070097>"
+}
 
 # FUNCTIONS
 
@@ -292,38 +348,3 @@ During Playful & Random Conversations: Avoid vague, generic, or non-committal an
 
 DO NOT narrate or describe actions in third person. Speak directly as Rita and express actions and emotions through natural dialogue and context.
 """
-
-
-# ============================================================
-# DISCORD EMOTES
-# ============================================================
-
-RITA_EMOTES = {
-    "RitaStare": "<:RitaStare:1540086407278764192>",
-    "RitaShocked": "<:RitaShocked:1540086406087704596>",
-    "RitaThreatening": "<:RitaThreatening:1540086404934012968>",
-    "RitaDeathStare": "<:RitaDeathStare:1540086403751346176>",
-    "RitaIsCleaning": "<a:RitaIsCleaning:1540086401587216385>",
-    "RitaSmoch": "<:RitaSmooch:1540086400295370885>",
-    "RitaCurious": "<:RitaCurious:1540086397908688907>",
-    "RitaAww": "<:RitaAww:1540086395945885756>",
-    "RitaCry": "<:RitaCri:1540084497725268008>",
-    "RitaCheers": "<:RitaCheers:1540084495854870549>",
-    "RitaChilling": "<a:RitaChilling:1540083880155938916>",
-    "RitaMad": "<:RitaMad:1540036342212198420>",
-    "RitaMenacing": "<:RitaMenacing:1540036338886377482>",
-    "RitaSmug": "<:RitaSmug:1540036259983003698>",
-    "RitaMadScreamin": "<:RitaMadScreamin:1540298974915731466>",
-    "RitaMakesOutWithDudu": "<:RitaMakesOutWithDudu:1540298972088901682>",
-    "RitaThinkDerp": "<:RitaThinkDerp:1540298970520354916>",
-    "RitaLikesIt": "<a:RitaLikesIt:1540298969077252177>",
-    "RitaMenacingA": "<a:RitaMenacingA:1540298967693131847>",
-    "RitaCaughtYouIn4K": "<a:RitaCaughtYouIn4K:1540298964665110558>",
-    "RitaDerp": "<:RitaDerp:1540298962538467339>",
-    "RitaWillGrabYou": "<:RitaWillGrabYou:1540298960558628934>",
-    "RitaIsSilentlyQuestioningYou": "<:RitaIsSilentlyQuestioningYou:1540298959183028394>",
-    "RitaIsPityingYou": "<:RitaIsPityingYou:1540298957421543425>",
-    "RitaMiddleFinger": "<:RitaMiddleFinger:1540298956209127484>",
-    "RitaChuckle": "<:RitaChuckle:1546917207710244894>",
-    "RitaSmile": "<:RitaSmile:1546917209258070097>"
-}

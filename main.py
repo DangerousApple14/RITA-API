@@ -353,31 +353,6 @@ def duck_search(query: str, max_results: int = 3) -> str:
     except Exception as e:
         return f"Failed to fetch search results: {str(e)}"
 
-
-# ============================================================
-# DISCORD SETUP
-# ============================================================
-
-def get_case_insensitive_prefix(bot, message):
-
-    prefix = "rita "
-
-    if message.content.lower().startswith(prefix):
-        return message.content[:len(prefix)]
-
-    return prefix
-
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-bot = commands.Bot(
-    command_prefix=get_case_insensitive_prefix,
-    intents=intents,
-    case_insensitive=True
-)
-
-
 # ============================================================
 # AI LOCK + CONVERSATION MEMORY
 # ============================================================
