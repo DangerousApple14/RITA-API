@@ -462,7 +462,7 @@ async def on_message(message):
 
     if cleaned_msg == "ok":
         try:
-            await message.add_reaction("<:MEI:1546917211019550820>")
+            await message.add_reaction(RITA_EMOTES["MEI"])
         except discord.HTTPException:
             print("Failed to add reaction idk.")
 
