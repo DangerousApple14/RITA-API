@@ -2642,91 +2642,106 @@ async def pvp(ctx, *, message: str = None):
         filled = max(0, min(10, int(value / AROUSAL_MAX * 10)))
         return "🟪" * filled + "⬜" * (10 - filled)
 
+    def battle_embed(round_num, events):
+        return discord.Embed(
+            title=f"⚔️ Battle Status — Round {round_num}",
+            description=(
+                f"**{names[uid1]}** — HP {hp[uid1]:.0f}/{max_hp[uid1]} {hp_bar(uid1)}\n"
+                f"Arousal {arousal[uid1]:.0f}/{AROUSAL_MAX}{' 🔥' if hardened[uid1] else ''} {arousal_bar(arousal[uid1])}\n\n"
+                f"**{names[uid2]}** — HP {hp[uid2]:.0f}/{max_hp[uid2]} {hp_bar(uid2)}\n"
+                f"Arousal {arousal[uid2]:.0f}/{AROUSAL_MAX}{' 🔥' if hardened[uid2] else ''} {arousal_bar(arousal[uid2])}\n\n"
+                + "\n".join(events[-6:])
+            ),
+            color=discord.Colour.green(),
+        )
+
     battle_msg = await ctx.send(embed=discord.Embed(title="⚔️ The battle begins!", color=discord.Colour.green()))
     prompt_msg = await ctx.send(
-        f"React to choose your action ({ACTION_TIMEOUT}s per round):\n"
-        f"{RITA_EMOTES['RitaMenacing']} Attack\n"
-        f"{RITA_EMOTES['RitaSurprised']} Harden (needs {HARDEN_AT}+ arousal)\n"
+        "On your turn, press a button:\n"
+        f"{RITA_EMOTES['RitaMenacing']} Attack • "
+        f"{RITA_EMOTES['RitaSurprised']} Harden (needs {HARDEN_AT}+ arousal) • "
         f"{RITA_EMOTES['RitaMiddleFinger']} Segs"
     )
 
     winner = None
     for round_num in range(1, MAX_ROUNDS + 1):
-        actions = await get_actions(prompt_msg, (uid1, uid2))
         events = []
+        # alternate who goes first each round for fairness
+        turn_order = [uid1, uid2] if round_num % 2 == 1 else [uid2, uid1]
+        actions = {}
 
-        # players who didn't react panic
-        for pid in (uid1, uid2):
-            if pid not in actions:
-                actions[pid] = random.choice(list(ACTION_EMOJIS.values()))
-                events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} hesitated and flailed randomly!")
-
-        # harden attempts
-        for pid in (uid1, uid2):
-            if actions[pid] != "harden":
+        # ---- collect actions ONE PLAYER AT A TIME (this is the turn-based part) ----
+        for pid in turn_order:
+            if hp[pid] <= 0:
                 continue
-            if hardened[pid]:
-                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} is already rock solid! (wasted turn)")
-            elif arousal[pid] >= HARDEN_AT:
-                hardened[pid] = True
-                asset = "nipples" if fighters[pid].stats["Chromosomes"] == "XX" else "boner"
-                events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} {names[pid]} HARDENS! Their {asset} now buffs them!")
-            else:
-                actions[pid] = "attack"
-                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} tried to harden but isn't aroused enough... attacks instead!")
+            view, choice = make_turn_view(pid, names[pid])
+            await prompt_msg.edit(
+                content=f"**Round {round_num} — {names[pid]}'s turn!** ({ACTION_TIMEOUT}s)",
+                view=view,
+            )
+            await view.wait()
 
-        # segs — both arousal reset, LESS aroused one takes the difference as sex damage
-        if "segs" in actions.values():
-            diff = abs(arousal[uid1] - arousal[uid2])
-            if diff == 0:
-                events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} They went for segs perfectly in sync... balanced. Nothing happens!")
+            if choice["action"]:
+                actions[pid] = choice["action"]
             else:
-                victim = uid1 if arousal[uid1] < arousal[uid2] else uid2
-                other = uid2 if victim == uid1 else uid1
-                dmg = calc_sex_damage(fighters[victim], fighters[other].stats["Chromosomes"], diff)
-                hp[victim] = max(0, hp[victim] - dmg)
-                events.append(f"💦 SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
-            arousal[uid1] = arousal[uid2] = 0
+                actions[pid] = random.choice(list(ACTION_EMOJIS.values()))
+                events.append(f"⏰ {names[pid]} hesitated and flailed randomly!")
 
-        # attacks (dodge happens passively inside calc_attack)
-        for pid in (uid1, uid2):
-            if actions[pid] != "attack":
+        # ---- resolve actions in turn order ----
+        for pid in turn_order:
+            if pid not in actions or hp[pid] <= 0:
                 continue
             opp = uid2 if pid == uid1 else uid1
-            if hp[pid] <= 0 or hp[opp] <= 0:
-                continue
-            dmg, crit, dodged = calc_attack(
-                fighters[pid], fighters[opp], hardened[pid], hardened[opp], dodge_streak[opp]
-            )
-            if dodged:
-                dodge_streak[opp] += 1
-                events.append(f"{RITA_EMOTES['RitaSurprised']} {names[opp]} dodged {names[pid]}'s attack!")
-            else:
-                dodge_streak[opp] = 0
-                hp[opp] = max(0, hp[opp] - dmg)
-                events.append(f"{RITA_EMOTES['RitaSmile']} {names[pid]} hits {names[opp]} for {dmg:.1f}{' **CRIT!**' if crit else ''}")
+            act = actions[pid]
 
-        # passive arousal from the opponent's assets
+            if act == "harden":
+                if hardened[pid]:
+                    events.append(f"😤 {names[pid]} is already rock solid! (wasted turn)")
+                elif arousal[pid] >= HARDEN_AT:
+                    hardened[pid] = True
+                    asset = "nipples" if fighters[pid].stats["Chromosomes"] == "XX" else "boner"
+                    events.append(f"🔥 {names[pid]} HARDENS! Their {asset} buffs them and seduces the enemy!")
+                else:
+                    events.append(f"😳 {names[pid]} tried to harden but isn't aroused enough... turn wasted!")
+
+            elif act == "segs":
+                diff = abs(arousal[uid1] - arousal[uid2])
+                if diff == 0:
+                    events.append("💦 They went for segs perfectly in sync... balanced. Nothing happens!")
+                else:
+                    victim = uid1 if arousal[uid1] < arousal[uid2] else uid2
+                    dmg = calc_sex_damage(fighters[victim], fighters[opp].stats["Chromosomes"], diff)
+                    hp[victim] = max(0, hp[victim] - dmg)
+                    events.append(f"💦 SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
+                arousal[uid1] = arousal[uid2] = 0
+
+            else:  # attack
+                dmg, crit, dodged = calc_attack(
+                    fighters[pid], fighters[opp], hardened[pid], hardened[opp], dodge_streak[opp]
+                )
+                if dodged:
+                    dodge_streak[opp] += 1
+                    events.append(f"💨 {names[opp]} dodged {names[pid]}'s attack!")
+                else:
+                    dodge_streak[opp] = 0
+                    hp[opp] = max(0, hp[opp] - dmg)
+                    events.append(f"⚔️ {names[pid]} hits {names[opp]} for {dmg:.1f}{' **CRIT!**' if crit else ''}")
+
+            # live feedback after every turn
+            await battle_msg.edit(embed=battle_embed(round_num, events))
+
+        # ---- end of round: passive arousal for both ----
         for pid in (uid1, uid2):
             opp = uid2 if pid == uid1 else uid1
             before = arousal[pid]
-            arousal[pid] = min(AROUSAL_MAX, arousal[pid] + calc_passive_arousal(fighters[pid], fighters[opp], hardened[pid]))
+            arousal[pid] = min(
+                AROUSAL_MAX,
+                arousal[pid] + calc_passive_arousal(fighters[pid], fighters[opp], hardened[pid], hardened[opp]),
+            )
             if before < HARDEN_AT <= arousal[pid]:
-                events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} is getting flustered... they can HARDEN now!")
+                events.append(f"❗ {names[pid]} is getting flustered... they can HARDEN now!")
 
-        # status + win check
-        battle_embed = discord.Embed(
-            title=f"⚔️ Battle Status — Round {round_num}",
-            description=(
-                f"**{names[uid1]}** — HP {hp[uid1]:.0f}/{max_hp[uid1]} {hp_bar(uid1)}\n"
-                f"Arousal {arousal[uid1]:.0f}/{AROUSAL_MAX}{' 🔥hardened' if hardened[uid1] else ''} {arousal_bar(arousal[uid1])}\n\n"
-                f"**{names[uid2]}** — HP {hp[uid2]:.0f}/{max_hp[uid2]} {hp_bar(uid2)}\n"
-                f"Arousal {arousal[uid2]:.0f}/{AROUSAL_MAX}{' 🔥hardened' if hardened[uid2] else ''} {arousal_bar(arousal[uid2])}\n\n"
-                + "\n".join(events[-6:])
-            ),
-            color=discord.Colour.green(),
-        )
-        await battle_msg.edit(embed=battle_embed)
+        await battle_msg.edit(embed=battle_embed(round_num, events))
 
         if hp[uid1] <= 0 and hp[uid2] <= 0:
             winner = "draw"; break
@@ -2735,24 +2750,14 @@ async def pvp(ctx, *, message: str = None):
         if hp[uid1] <= 0:
             winner = uid2; break
 
-        # reset reactions for next round; if no perms, make a fresh prompt
-        try:
-            await prompt_msg.clear_reactions()
-        except discord.HTTPException:
-            prompt_msg = await ctx.send("*next round — react here:*")
-
-    # timeout cap -> whoever has more HP left wins
     if winner is None:
         f1, f2 = hp[uid1] / max_hp[uid1], hp[uid2] / max_hp[uid2]
         winner = uid1 if f1 > f2 else uid2 if f2 > f1 else "draw"
 
+    await prompt_msg.edit(content="The duel has ended!", view=None)
     if winner == "draw":
         await ctx.send(f"Both masters collapse simultaneously... it's a draw. {RITA_EMOTES['RitaCri']}")
     else:
         await ctx.send(f"🏆 {mentions[winner]} wins the duel! {RITA_EMOTES['RitaCheers']}")
-
-# ============================================================
-# START BOT
-# ============================================================
 
 bot.run(BOT_TOKEN)

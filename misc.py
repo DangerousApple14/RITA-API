@@ -126,8 +126,12 @@ def get_cup_size(cup: str = None):
 
 HARDEN_AT = 50
 AROUSAL_MAX = 100
-ACTION_TIMEOUT = 20 # seconds per round
+ACTION_TIMEOUT = 15      # seconds per TURN (not per round anymore)
 MAX_ROUNDS = 25
+
+AROUSAL_PER_TURN = 10    # base self-gain per round
+AROUSAL_HARDENED = 5     # self-gain while hardened (hardening calms you down)
+SEDUCTION_RATE = 20      # x: bonus arousal the OPPONENT gets from your hardened "asset"
 
 ACTION_EMOJIS = {
     RITA_EMOTES["RitaMenacing"]: "attack",
@@ -220,31 +224,45 @@ def calc_passive_arousal(fighter, opponent, is_hardened):
         gain *= 0.5                                          # hardening calms you slightly
     return gain
 
-async def get_actions(prompt_msg, ids, timeout=ACTION_TIMEOUT):
-    """Wait for both players to react with an action emoji -> {user_id: action}"""
-    choices = {}
+def calc_passive_arousal(fighter, opponent, self_hardened, opponent_hardened):
+    """+10/turn normally, +5/turn while self is hardened.
+    If the OPPONENT is hardened, you additionally soak their cup/PP% x SEDUCTION_RATE,
+    scaled by how attracted you are to their chromosomes."""
+    gain = AROUSAL_HARDENED if self_hardened else AROUSAL_PER_TURN
+    if opponent_hardened:
+        o = opponent.stats
+        asset = o["pvpCup"] if o["Chromosomes"] == "XX" else o["pvpPP"]
+        gain += SEDUCTION_RATE * asset * attraction_of(fighter, o["Chromosomes"])
+    return gain
 
-    def check(reaction, user):
-        return (
-            reaction.message.id == prompt_msg.id
-            and user.id in ids
-            and user.id not in choices
-            and str(reaction.emoji) in ACTION_EMOJIS
-        )
+def make_turn_view(acting_pid, acting_name):
+    """One-shot button view for the acting player. -> (view, choice dict)"""
+    view = discord.ui.View(timeout=ACTION_TIMEOUT)
+    choice = {"action": None}
 
-    for emoji in ACTION_EMOJIS:
-        try:
-            await prompt_msg.add_reaction(emoji)
-        except discord.HTTPException:
-            pass
+    async def make_cb(action):
+        async def cb(interaction: discord.Interaction):
+            if interaction.user.id != acting_pid:
+                await interaction.response.send_message("It's not your turn, baka!", ephemeral=True)
+                return
+            if choice["action"] is not None:          # double-click guard
+                await interaction.response.defer()
+                return
+            choice["action"] = action
+            for item in view.children:
+                item.disabled = True
+            await interaction.response.edit_message(
+                content=f"**{acting_name}** made their move...", view=view
+            )
+            view.stop()
+        return cb
 
-    try:
-        while len(choices) < 2:
-            reaction, user = await bot.wait_for("reaction_add", check=check, timeout=timeout)
-            choices[user.id] = ACTION_EMOJIS[str(reaction.emoji)]
-    except asyncio.TimeoutError:
-        pass
-    return choices
+    for emoji, action in ACTION_EMOJIS.items():
+        btn = discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=emoji, label=action.capitalize())
+        btn.callback = make_cb(action)
+        view.add_item(btn)
+
+    return view, choice
 
 # VARIABLES/CONSTANTS
 
