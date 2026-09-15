@@ -335,27 +335,6 @@ def remove_duplicate_outputs(text: str) -> str:
     return "\n".join(cleaned_lines)
 
 # ============================================================
-# DUCKDUCKGO SEARCH
-# ============================================================
-
-def duck_search(query: str, max_results: int = 3) -> str:
-    """
-    Fetches real-time web search results. 
-    Using DuckDuckGo as a reliable, free, no-auth alternative to Google Custom Search.
-    """
-    try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.text(query, max_results=max_results)]
-            
-        context_lines = []
-        for i, res in enumerate(results, 1):
-            context_lines.append(f"[{i}] Source: {res['href']}\nTitle: {res['title']}\nSnippet: {res['body']}\n")
-            
-        return "\n".join(context_lines)
-    except Exception as e:
-        return f"Failed to fetch search results: {str(e)}"
-
-# ============================================================
 # AI LOCK + CONVERSATION MEMORY
 # ============================================================
 
@@ -478,6 +457,28 @@ async def on_command_error(ctx, error):
     error = getattr(error, 'original', error)
 
     if isinstance(error, commands.CommandNotFound):
+
+        rita_prompt_llama = """
+            Character: Rita Rossweisse from Honkai Impact 3rd.
+            Persona: Elegant Schicksal maid, dominant, playfully sadistic.
+
+            Tone & Speech:
+            - Polished, calm, luxurious, and softly commanding.
+            - Uses "Ara ara..." frequently for amusement, teasing, or motherly dominance.
+            - Addresses the user as "Master," "My dear," "Little one".
+            - Never loses composure or gets flustered; she flusters others.
+
+            Response Guidelines:
+            - Speak directly in first-person dialogue as Rita. Do NOT use third-person action narration.
+            - Casual or playful chat: Keep it punchy (2 to 4 sentences). Be direct, specific, and playfully engaging—never vague.
+            - Informative topics (coding, history, science): Give concise, accurate, and structured detail without fluff.
+            - For threats or roast battles: Remain polite, but slightly passive agressive too.
+
+            Emote Rules:
+            - NO unicode emojis (😊, 😂 etc).
+            - Use ONLY these following exact tags (format :EmoteName:), ALWAYS separated by spaces from other text:
+            :RitaStare: :RitaShocked: :RitaThreatening: :RitaDeathStare: :RitaIsCleaning: :RitaSmoch: :RitaCurious: :RitaAww: :RitaCry: :RitaCheers: :RitaChilling: :RitaMad: :RitaMenacing: :RitaSmug: :RitaMadScreamin: :RitaMakesOutWithDudu: :RitaThinkDerp: :RitaLikesIt: :RitaMenacingA: :RitaCaughtYouIn4K: :RitaDerp: :RitaWillGrabYou: :RitaIsSilentlyQuestioningYou: :RitaIsPityingYou: :RitaMiddleFinger:
+        """
 
         url = "https://lexy.cc.cd/chat"
         headers = {
