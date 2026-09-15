@@ -470,23 +470,13 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-@bot.event
-async def on_message(message):
-    if message.author.bot and message.author.name == "AutoMod":
-        if message.embeds:
-            embed = message.embeds[0]
-            if embed.description and ".tooru" in embed.description:
-                await message.channel.send("https://cdn.discordapp.com/attachments/788723515112030208/1198756147302256680/Screenshot_20201024-2210562_1.png")
-
-    await bot.process_commands(message)
-
 
 llm_lock = asyncio.Lock()
 @bot.event
 async def on_command_error(ctx, error):
 
     error = getattr(error, 'original', error)
-    
+
     if isinstance(error, commands.CommandNotFound):
 
         url = "https://lexy.cc.cd/chat"
