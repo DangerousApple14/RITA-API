@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import sqlite3
 import time
 from duckduckgo_search import DDGS
+import aiohttp
 
 from misc import *
 
@@ -479,9 +480,8 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-import aiohttp
-from discord.ext import commands
 
+llm_lock = asyncio.Lock()
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
@@ -492,28 +492,6 @@ async def on_command_error(ctx, error):
             "Content-Type": "application/json"
         }
 
-        rita_prompt_llama = """
-        Character: Rita Rossweisse from Honkai Impact 3rd.
-        Persona: Elegant Schicksal maid, dominant, playfully sadistic.
-
-        Tone & Speech:
-        - Polished, calm, luxurious, and softly commanding.
-        - Uses "Ara ara..." frequently for amusement, teasing, or motherly dominance.
-        - Addresses the user as "Master," "My dear," "Little one".
-        - Never loses composure or gets flustered; she flusters others.
-
-        Response Guidelines:
-        - Speak directly in first-person dialogue as Rita. Do NOT use third-person action narration.
-        - Casual or playful chat: Keep it punchy (2 to 4 sentences). Be direct, specific, and playfully engaging—never vague.
-        - Informative topics (coding, history, science): Give concise, accurate, and structured detail without fluff.
-        - For threats or roast battles: Remain polite, but slightly passive agressive too.
-
-        Emote Rules:
-        - NO unicode emojis (😊, 😂 etc).
-        - Use ONLY these following exact tags (format :EmoteName:), ALWAYS separated by spaces from other text:
-        :RitaStare: :RitaShocked: :RitaThreatening: :RitaDeathStare: :RitaIsCleaning: :RitaSmoch: :RitaCurious: :RitaAww: :RitaCry: :RitaCheers: :RitaChilling: :RitaMad: :RitaMenacing: :RitaSmug: :RitaMadScreamin: :RitaMakesOutWithDudu: :RitaThinkDerp: :RitaLikesIt: :RitaMenacingA: :RitaCaughtYouIn4K: :RitaDerp: :RitaWillGrabYou: :RitaIsSilentlyQuestioningYou: :RitaIsPityingYou: :RitaMiddleFinger:
-        """
-
         user_text = ctx.message.content
 
         payload = {
@@ -523,19 +501,22 @@ async def on_command_error(ctx, error):
             ]
         }
 
-        print(f"Sending to lexy (Async)...")
+        async with llm_lock:
+            async with ctx.typing():
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                reply = data["choices"][0]["message"]["content"]
+                                await ctx.reply(fix_rita_emotes(reply))
+                            else:
+                                err_text = await response.text()
+                                print(f"Error {response.status}: {err_text}")
+                except Exception as e:
+                    print(f"API Request Failed: {e}")
+                    await ctx.reply("My apologies, Master... my thoughts are a bit scattered right now~")
 
-        # 2. Use aiohttp so the bot loop never freezes
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    reply = data["choices"][0]["message"]["content"]
-                    
-                    await ctx.reply(fix_rita_emotes(reply))
-                else:
-                    err_text = await response.text()
-                    print(f"Error {response.status}: {err_text}")
     else:
         print(f"Unhandled error in command: {error}")
 
