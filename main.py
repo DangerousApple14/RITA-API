@@ -484,6 +484,9 @@ async def on_message(message):
 llm_lock = asyncio.Lock()
 @bot.event
 async def on_command_error(ctx, error):
+
+    error = getattr(error, 'original', error)
+    
     if isinstance(error, commands.CommandNotFound):
 
         url = "https://lexy.cc.cd/chat"
