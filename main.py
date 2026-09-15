@@ -26,6 +26,7 @@ load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 LANGSEARCH_API_KEY = os.environ.get("LANGSEARCH_API_KEY")
+CUSTOM_API_KEY = os.environ.get("CUSTOM_API_KEY")
 
 def init_database():
 
@@ -477,6 +478,66 @@ async def on_message(message):
                 await message.channel.send("https://cdn.discordapp.com/attachments/788723515112030208/1198756147302256680/Screenshot_20201024-2210562_1.png")
 
     await bot.process_commands(message)
+
+import aiohttp
+from discord.ext import commands
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+
+        url = "https://lexy.cc.cd/chat"
+        headers = {
+            "X-API-Key": CUSTOM_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        rita_prompt_llama = """
+        Character: Rita Rossweisse from Honkai Impact 3rd.
+        Persona: Elegant Schicksal maid, dominant, playfully sadistic.
+
+        Tone & Speech:
+        - Polished, calm, luxurious, and softly commanding.
+        - Uses "Ara ara..." frequently for amusement, teasing, or motherly dominance.
+        - Addresses the user as "Master," "My dear," "Little one".
+        - Never loses composure or gets flustered; she flusters others.
+
+        Response Guidelines:
+        - Speak directly in first-person dialogue as Rita. Do NOT use third-person action narration.
+        - Casual or playful chat: Keep it punchy (2 to 4 sentences). Be direct, specific, and playfully engaging—never vague.
+        - Informative topics (coding, history, science): Give concise, accurate, and structured detail without fluff.
+        - For threats or roast battles: Remain polite, but slightly passive agressive too.
+
+        Emote Rules:
+        - NO unicode emojis (😊, 😂 etc).
+        - Use ONLY these following exact tags (format :EmoteName:), ALWAYS separated by spaces from other text:
+        :RitaStare: :RitaShocked: :RitaThreatening: :RitaDeathStare: :RitaIsCleaning: :RitaSmoch: :RitaCurious: :RitaAww: :RitaCry: :RitaCheers: :RitaChilling: :RitaMad: :RitaMenacing: :RitaSmug: :RitaMadScreamin: :RitaMakesOutWithDudu: :RitaThinkDerp: :RitaLikesIt: :RitaMenacingA: :RitaCaughtYouIn4K: :RitaDerp: :RitaWillGrabYou: :RitaIsSilentlyQuestioningYou: :RitaIsPityingYou: :RitaMiddleFinger:
+        """
+
+        user_text = ctx.message.content
+
+        payload = {
+            "messages": [
+                {"role": "system", "content": rita_prompt_llama.strip()},
+                {"role": "user", "content": f'The user "{ctx.author.display_name}" said: {user_text}'}
+            ]
+        }
+
+        print(f"Sending to lexy (Async)...")
+
+        # 2. Use aiohttp so the bot loop never freezes
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    reply = data["choices"][0]["message"]["content"]
+                    
+                    await ctx.reply(fix_rita_emotes(reply))
+                else:
+                    err_text = await response.text()
+                    print(f"Error {response.status}: {err_text}")
+    else:
+        print(f"Unhandled error in command: {error}")
 
 # ============================================================
 # AI COOLDOWNS
@@ -2769,5 +2830,7 @@ async def pvp(ctx, *, message: str = None):
         await ctx.send(f"Both masters collapse simultaneously... it's a draw. {RITA_EMOTES['RitaCri']}")
     else:
         await ctx.send(f"🏆 {mentions[winner]} wins the duel! {RITA_EMOTES['RitaCheers']}")
+
+
 
 bot.run(BOT_TOKEN)
