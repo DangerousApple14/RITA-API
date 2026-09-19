@@ -13,7 +13,6 @@ from randfacts import get_fact
 from dotenv import load_dotenv
 import sqlite3
 import time
-from duckduckgo_search import DDGS
 import aiohttp
 
 from misc import *
@@ -488,10 +487,33 @@ async def on_command_error(ctx, error):
 
         user_text = ctx.message.content
 
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+
+    if ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            # Fetch the referenced message from the channel
+            referenced_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            replied_text = referenced_msg.content
+            reply_author = referenced_msg.author.display_name
+
+        except Exception as e:
+            print(f"Error fetching referenced message: {e}")
+            replied_text = ""
+            reply_author = ""
+
+        if replied_text and reply_author:
+            prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
+        elif replied_text:
+            prompt = f"Have this as context: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
+        else:
+            prompt = f"The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
+
+
         payload = {
             "messages": [
                 {"role": "system", "content": rita_prompt_llama.strip()},
-                {"role": "user", "content": f'The user "{ctx.author.display_name}" said: {user_text}'}
+                {"role": "user", "content": prompt}
             ]
         }
 
@@ -509,6 +531,7 @@ async def on_command_error(ctx, error):
                                 print(f"Error {response.status}: {err_text}")
                 except Exception as e:
                     print(f"API Request Failed: {e}")
+                    await DMerror(e)
                     await ctx.reply("My apologies, Master... my thoughts are a bit scattered right now~")
 
     else:
@@ -519,7 +542,6 @@ async def on_command_error(ctx, error):
 # ============================================================
 
 AI_COOLDOWNS = {}
-
 
 # ============================================================
 # AI COMMAND
@@ -697,6 +719,8 @@ async def rita_ai(ctx, *, prompt: str = ""):
                     f"{RITA_EMOTES['RitaShocked']}"
                 )
 
+                await DMerror(e)
+
             except Exception as e:
 
                 print(f"NVIDIA API error: {e}")
@@ -706,6 +730,8 @@ async def rita_ai(ctx, *, prompt: str = ""):
                     f"an error occurred while processing your request. "
                     f"{RITA_EMOTES['RitaIsPityingYou']}"
                 )
+
+                await DMerror(e)
 
 # ============================================================
 # FORGET MEMORY
@@ -2806,6 +2832,101 @@ async def pvp(ctx, *, message: str = None):
     else:
         await ctx.send(f"🏆 {mentions[winner]} wins the duel! {RITA_EMOTES['RitaCheers']}")
 
+# ============================================================
+# AURA ROULETTE
+# ============================================================
+
+"""@bot.command(name="aura roulette", aliases=["ar"])
+async def aura_roulette(ctx):
+    AURA_PTS = 10
+    """
+
+EMOTE_REGEX = re.compile(r"<a?:(\w+):(\d+)>")
+@bot.command(name="steal", aliases=["grab", "emoji", "e"])
+@commands.has_permissions(manage_emojis_and_stickers=True)
+async def steal_emojis(ctx):
+    # Build a list of candidate messages
+    targets = []
+
+    # Add referenced message if it exists and resolved into a valid Message
+    if ctx.message.reference and isinstance(ctx.message.reference.resolved, discord.Message):
+        targets.append(ctx.message.reference.resolved)
+
+    # Always include the command message itself
+    targets.append(ctx.message)
+
+    # Iterate over all target messages to collect emojis/stickers
+    for target_msg in targets:
+        if not isinstance(target_msg, discord.Message):
+            await ctx.send("Could not process the referenced message.")
+            return
+
+        added_emojis = []
+        added_stickers = []
+
+        async with aiohttp.ClientSession() as session:
+            matches = EMOTE_REGEX.findall(target_msg.content)
+            
+            for name, emoji_id in matches:
+                animated = target_msg.content.find(f"<a:{name}:{emoji_id}>") != -1
+                ext = "gif" if animated else "png"
+                url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}"
+
+                try:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            image_bytes = await resp.read()
+                            new_emoji = await ctx.guild.create_custom_emoji(
+                                name=name, 
+                                image=image_bytes, 
+                                reason=f"Added by {ctx.author}"
+                            )
+                            added_emojis.append(f"<:{new_emoji.name}:{new_emoji.id}>" if not animated else f"<a:{new_emoji.name}:{new_emoji.id}>")
+                except discord.HTTPException as e:
+                    await ctx.send(f"Failed to add emoji `{name}`: {e}")
+
+            if target_msg.stickers:
+                for sticker in target_msg.stickers:
+                    # stickers can be PNG, APNG, or Lottie (JSON)
+                    if sticker.format == discord.StickerFormatType.lottie:
+                        await ctx.send(f"Skipped sticker `{sticker.name}`: Lottie (animated vector) stickers cannot be added via bot API.")
+                        continue
+
+                    try:
+                        async with session.get(sticker.url) as resp:
+                            if resp.status == 200:
+                                file_bytes = await resp.read()
+                                # Convert file bytes to a discord.File object required for guild stickers
+                                sticker_file = discord.File(fp=io.BytesIO(file_bytes), filename=f"{sticker.name}.png")
+                                
+                                new_sticker = await ctx.guild.create_sticker(
+                                    name=sticker.name,
+                                    description="Stolen via bot command",
+                                    emoji="😏",  # Related emoji tag required by Discord
+                                    file=sticker_file,
+                                    reason=f"Added by {ctx.author} apparently..."
+                                )
+                                added_stickers.append(new_sticker.name)
+                    except discord.HTTPException as e:
+                        await ctx.send(f"Failed to add sticker `{sticker.name}`: {e}")
+
+        # 4. Summary Response
+        if not added_emojis and not added_stickers:
+            await ctx.send("No custom emojis or valid stickers found to add.")
+            return
+
+    msg = "Successfully added:\n"
+    if added_emojis:
+        msg += f"**Emojis:** {' '.join(added_emojis)}\n"
+    if added_stickers:
+        msg += f"**Stickers:** {', '.join(added_stickers)}"
+    
+    await ctx.send(msg)
+
+@steal_emojis.error
+async def steal_emojis_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send(f"Master, you need the `Manage Emojis and Stickers` permission to use this command. {RITA_EMOTES["RitaIsPityingYou"]}")
 
 
 bot.run(BOT_TOKEN)
