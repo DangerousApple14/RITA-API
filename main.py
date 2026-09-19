@@ -2836,75 +2836,91 @@ EMOTE_REGEX = re.compile(r"<a?:(\w+):(\d+)>")
 @bot.command(name="steal", aliases=["grab", "emoji", "e"])
 @commands.has_permissions(manage_emojis_and_stickers=True)
 async def steal_emojis(ctx):
-    # Build a list of candidate messages
     targets = []
-
-    # Add referenced message if it exists and resolved into a valid Message
     if ctx.message.reference and isinstance(ctx.message.reference.resolved, discord.Message):
         targets.append(ctx.message.reference.resolved)
-
-    # Always include the command message itself
     targets.append(ctx.message)
 
-    # Iterate over all target messages to collect emojis/stickers
+    all_texts = []
+    stickers_to_process = []
+
     for target_msg in targets:
         if not isinstance(target_msg, discord.Message):
-            await ctx.send("Could not process the referenced message.")
-            return
+            continue
 
-        added_emojis = []
-        added_stickers = []
+        if target_msg.content:
+            all_texts.append(target_msg.content)
+        if target_msg.stickers:
+            stickers_to_process.extend(target_msg.stickers)
 
-        async with aiohttp.ClientSession() as session:
-            matches = EMOTE_REGEX.findall(target_msg.content)
-            
-            for name, emoji_id in matches:
-                animated = target_msg.content.find(f"<a:{name}:{emoji_id}>") != -1
-                ext = "gif" if animated else "png"
-                url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}"
+        if target_msg.snapshots:
+            for snapshot in target_msg.snapshots:
+                if snapshot.content:
+                    all_texts.append(snapshot.content)
+                if snapshot.stickers:
+                    stickers_to_process.extend(snapshot.stickers)
 
-                try:
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            image_bytes = await resp.read()
-                            new_emoji = await ctx.guild.create_custom_emoji(
-                                name=name, 
-                                image=image_bytes, 
-                                reason=f"Added by {ctx.author}"
-                            )
-                            added_emojis.append(f"<:{new_emoji.name}:{new_emoji.id}>" if not animated else f"<a:{new_emoji.name}:{new_emoji.id}>")
-                except discord.HTTPException as e:
-                    await ctx.send(f"Failed to add emoji `{name}`: {e}")
+    combined_text = " ".join(all_texts)
+    matches = EMOTE_REGEX.findall(combined_text)
 
-            if target_msg.stickers:
-                for sticker in target_msg.stickers:
-                    # stickers can be PNG, APNG, or Lottie (JSON)
-                    if sticker.format == discord.StickerFormatType.lottie:
-                        await ctx.send(f"Skipped sticker `{sticker.name}`: Lottie (animated vector) stickers cannot be added via bot API.")
-                        continue
+    if not matches and not stickers_to_process:
+        await ctx.send("No custom emojis or valid stickers found to add.")
+        return
 
-                    try:
-                        async with session.get(sticker.url) as resp:
-                            if resp.status == 200:
-                                file_bytes = await resp.read()
-                                # Convert file bytes to a discord.File object required for guild stickers
-                                sticker_file = discord.File(fp=io.BytesIO(file_bytes), filename=f"{sticker.name}.png")
-                                
-                                new_sticker = await ctx.guild.create_sticker(
-                                    name=sticker.name,
-                                    description="Stolen via bot command",
-                                    emoji="😏",  # Related emoji tag required by Discord
-                                    file=sticker_file,
-                                    reason=f"Added by {ctx.author} apparently..."
-                                )
-                                added_stickers.append(new_sticker.name)
-                    except discord.HTTPException as e:
-                        await ctx.send(f"Failed to add sticker `{sticker.name}`: {e}")
+    added_emojis = []
+    added_stickers = []
 
-        # 4. Summary Response
-        if not added_emojis and not added_stickers:
-            await ctx.send("No custom emojis or valid stickers found to add.")
-            return
+    async with aiohttp.ClientSession() as session:
+        seen_emojis = set()
+        for name, emoji_id in matches:
+            if emoji_id in seen_emojis:
+                continue
+            seen_emojis.add(emoji_id)
+
+            animated = combined_text.find(f"<a:{name}:{emoji_id}>") != -1
+            ext = "gif" if animated else "png"
+            url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}"
+
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        image_bytes = await resp.read()
+                        new_emoji = await ctx.guild.create_custom_emoji(
+                            name=name, 
+                            image=image_bytes, 
+                            reason=f"Added by {ctx.author}"
+                        )
+                        added_emojis.append(
+                            f"<a:{new_emoji.name}:{new_emoji.id}>" if animated else f"<:{new_emoji.name}:{new_emoji.id}>"
+                        )
+            except discord.HTTPException as e:
+                await ctx.send(f"Failed to add emoji `{name}`: {e}")
+
+        for sticker in stickers_to_process:
+            if sticker.format == discord.StickerFormatType.lottie:
+                await ctx.send(f"Skipped sticker `{sticker.name}`: Lottie (animated vector) stickers cannot be added via bot API.")
+                continue
+
+            try:
+                async with session.get(sticker.url) as resp:
+                    if resp.status == 200:
+                        file_bytes = await resp.read()
+                        sticker_file = discord.File(fp=io.BytesIO(file_bytes), filename=f"{sticker.name}.png")
+                        
+                        new_sticker = await ctx.guild.create_sticker(
+                            name=sticker.name,
+                            description="Stolen via bot command",
+                            emoji="😏",
+                            file=sticker_file,
+                            reason=f"Added by {ctx.author} apparently..."
+                        )
+                        added_stickers.append(new_sticker.name)
+            except discord.HTTPException as e:
+                await ctx.send(f"Failed to add sticker `{sticker.name}`: {e}")
+
+    if not added_emojis and not added_stickers:
+        await ctx.send("Failed to add any of the found emojis or stickers.")
+        return
 
     msg = "Successfully added:\n"
     if added_emojis:
@@ -2918,6 +2934,5 @@ async def steal_emojis(ctx):
 async def steal_emojis_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send(f"Master, you need the `Manage Emojis and Stickers` permission to use this command. {RITA_EMOTES["RitaIsPityingYou"]}")
-
 
 bot.run(BOT_TOKEN)
