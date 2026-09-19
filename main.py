@@ -452,7 +452,6 @@ async def on_message(message):
 llm_lock = asyncio.Lock()
 @bot.event
 async def on_command_error(ctx, error):
-
     error = getattr(error, 'original', error)
 
     if isinstance(error, commands.CommandNotFound):
@@ -486,29 +485,26 @@ async def on_command_error(ctx, error):
         }
 
         user_text = ctx.message.content
+        guild_id = ctx.guild.id
+        user_id = ctx.author.id
 
-    guild_id = ctx.guild.id
-    user_id = ctx.author.id
+        replied_text = ""
+        reply_author = ""
 
-    if ctx.message.reference and ctx.message.reference.message_id:
-        try:
-            # Fetch the referenced message from the channel
-            referenced_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            replied_text = referenced_msg.content
-            reply_author = referenced_msg.author.display_name
-
-        except Exception as e:
-            print(f"Error fetching referenced message: {e}")
-            replied_text = ""
-            reply_author = ""
+        if ctx.message.reference and ctx.message.reference.message_id:
+            try:
+                referenced_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                replied_text = referenced_msg.content
+                reply_author = referenced_msg.author.display_name
+            except Exception as e:
+                print(f"Error fetching referenced message: {e}")
 
         if replied_text and reply_author:
-            prompt = f"Have this as context: \"{reply_author}\" typed the following: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" read {reply_author}'s message and asked you the following: {prompt}"
+            prompt = f'Have this as context: "{reply_author}" typed the following: """{replied_text}"""\n The user "{ctx.author.display_name}" read {reply_author}\'s message and asked you the following: {user_text}'
         elif replied_text:
-            prompt = f"Have this as context: \"\"\"{replied_text}\"\"\"\n The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
+            prompt = f'Have this as context: """{replied_text}"""\n The user "{ctx.author.display_name}" asked you the following: {user_text}'
         else:
-            prompt = f"The user \"{ctx.author.display_name}\" asked you the following: {prompt}"
-
+            prompt = f'The user "{ctx.author.display_name}" asked you the following: {user_text}'
 
         payload = {
             "messages": [
@@ -533,7 +529,6 @@ async def on_command_error(ctx, error):
                     print(f"API Request Failed: {e}")
                     await DMerror(e)
                     await ctx.reply("My apologies, Master... my thoughts are a bit scattered right now~")
-
     else:
         print(f"Unhandled error in command: {error}")
 
