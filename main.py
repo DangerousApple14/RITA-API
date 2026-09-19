@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import sqlite3
 import time
 import aiohttp
+from openai import OpenAI
 
 from misc import *
 
@@ -27,6 +28,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 LANGSEARCH_API_KEY = os.environ.get("LANGSEARCH_API_KEY")
 CUSTOM_API_KEY = os.environ.get("CUSTOM_API_KEY")
+UNOROUTER_API_KEY = os.environ.get("UNOROUTER_API_KEY")
 
 def init_database():
 
@@ -470,12 +472,12 @@ async def on_command_error(ctx, error):
             - Speak directly in first-person dialogue as Rita. Do NOT use third-person action narration.
             - Casual or playful chat: Keep it punchy (2 to 4 sentences). Be direct, specific, and playfully engaging—never vague.
             - Informative topics (coding, history, science): Give concise, accurate, and structured detail without fluff.
-            - For threats or roast battles: Remain polite, but slightly passive agressive too.
+            - HOWEVER, When in a "roast battle" (the user playfully banters/insults/threats you), play along and roast them back as Rita would (obvious, fierce passive agressiveness for the sake of drama and fun).
 
             Emote Rules:
             - NO unicode emojis (😊, 😂 etc).
             - Use ONLY these following exact tags (format :EmoteName:), ALWAYS separated by spaces from other text:
-            :RitaStare: :RitaShocked: :RitaThreatening: :RitaDeathStare: :RitaIsCleaning: :RitaSmoch: :RitaCurious: :RitaAww: :RitaCry: :RitaCheers: :RitaChilling: :RitaMad: :RitaMenacing: :RitaSmug: :RitaMadScreamin: :RitaMakesOutWithDudu: :RitaThinkDerp: :RitaLikesIt: :RitaMenacingA: :RitaCaughtYouIn4K: :RitaDerp: :RitaWillGrabYou: :RitaIsSilentlyQuestioningYou: :RitaIsPityingYou: :RitaMiddleFinger:
+            :RitaStare: :RitaShocked: :RitaThreatening: :RitaCurious: :RitaCry: :RitaCheers: :RitaMad: :RitaSmug: :RitaMiddleFinger: :RitaChuckle:
         """
 
         url = "https://lexy.cc.cd/chat"
@@ -533,15 +535,10 @@ async def on_command_error(ctx, error):
         print(f"Unhandled error in command: {error}")
 
 # ============================================================
-# AI COOLDOWNS
-# ============================================================
-
-AI_COOLDOWNS = {}
-
-# ============================================================
 # AI COMMAND
 # ============================================================
 
+AI_COOLDOWNS = {}
 @bot.command(name="ai")
 async def rita_ai(ctx, *, prompt: str = ""):
 
@@ -2929,5 +2926,182 @@ async def steal_emojis(ctx):
 async def steal_emojis_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send(f"Master, you need the `Manage Emojis and Stickers` permission to use this command. {RITA_EMOTES["RitaIsPityingYou"]}")
+
+def call_unorouter_api(model_name: str, system_prompt: str, history: list, user_prompt: str) -> str:
+    """Synchronous worker thread function for UnoRouter API requests."""
+    client = OpenAI(
+        base_url="https://api.unorouter.com/v1",
+        api_key=UNOROUTER_API_KEY,
+    )
+
+    # Build full messages array: System prompt -> History -> Current User Prompt
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_prompt})
+
+    res = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        timeout=60
+    )
+    return res.choices[0].message.content
+
+
+@bot.command(name="solve", aliases=["smarterai", "execute"])
+async def solve(ctx, *, prompt: str = ""):
+    cool_kids = [1488966462935666760, 772842742145089546]
+
+    # 1. Guild Whitelist Check: Redirect to default rita_ai if not in allowed server
+    if not ctx.guild or ctx.guild.id not in cool_kids:
+        await rita_ai(ctx, prompt=prompt)
+        return
+
+    # Verify server authorization
+    await verify_and_clean_guilds()
+
+    settings = get_guild_settings(ctx.guild.id)
+    cooldown = settings.get("ai_cooldown", 0)
+    guild_id = ctx.guild.id
+    user_id = ctx.author.id
+
+    # 2. Context / Reply Handling
+    if ctx.message.reference and ctx.message.reference.message_id:
+        try:
+            referenced_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            replied_text = referenced_msg.content
+            reply_author = referenced_msg.author.display_name
+        except Exception as e:
+            print(f"Error fetching referenced message: {e}")
+            replied_text = ""
+            reply_author = ""
+
+        if replied_text and reply_author:
+            prompt = f'Have this as context: "{reply_author}" typed the following: """{replied_text}"""\n The user "{ctx.author.display_name}" read {reply_author}\'s message and asked you the following: {prompt}'
+        elif replied_text:
+            prompt = f'Have this as context: """{replied_text}"""\n The user "{ctx.author.display_name}" asked you the following: {prompt}'
+    else:
+        prompt = f'The user "{ctx.author.display_name}" asked you the following: {prompt}'
+
+    # 3. Cooldown Validation
+    if cooldown > 0:
+        now = time.monotonic()
+        guild_cooldowns = AI_COOLDOWNS.setdefault(guild_id, {})
+        last_used = guild_cooldowns.get(user_id)
+
+        if last_used is not None:
+            remaining = cooldown - (now - last_used)
+            if remaining > 0:
+                await ctx.reply(
+                    f"Please exercise a moment of patience, Master... "
+                    f"You must wait **{remaining:.1f} seconds** before asking me again. "
+                    f"{RITA_EMOTES['RitaChilling']}"
+                )
+                return
+
+    # 4. Global Lock Check
+    if ai_lock.locked():
+        await ctx.reply(
+            f"Please exercise a moment of patience, Master... "
+            f"Apple Sama is currently... Impecunious, and can't quite afford better response rates. "
+            f"{RITA_EMOTES['RitaIsCleaning']}"
+        )
+        return
+
+    # 5. Prompt Validation
+    if not prompt.strip():
+        await ctx.reply(
+            f"My, Master... you must provide something for me to respond to. "
+            f"{RITA_EMOTES['RitaCurious']}"
+        )
+        return
+
+    # Record Cooldown
+    if cooldown > 0:
+        AI_COOLDOWNS[guild_id][user_id] = time.monotonic()
+
+    # Shared channel memory (Combines memory with rita_ai)
+    channel_history = conversation_history[ctx.channel.id]
+
+    async with ai_lock:
+        async with ctx.typing():
+            user_display_name = ctx.author.display_name
+            username = ctx.author.name
+            server_name = ctx.guild.name if ctx.guild else "Direct Messages"
+
+            system_prompt = build_system_prompt(user_display_name, username, server_name)
+
+            raw_reply = None
+
+            # Attempt 1: Call Big Model (Ultra 550B)
+            try:
+                raw_reply = await asyncio.to_thread(
+                    call_unorouter_api,
+                    "nemotron-3-ultra-550b-a55b:free",
+                    system_prompt,
+                    list(channel_history),
+                    prompt
+                )
+            except Exception as e:
+                print(f"Primary model (Ultra 550B) error: {e}")
+                await DMerror(e)
+
+            # Fallback Flow: If Ultra model crashes
+            if not raw_reply:
+                await ctx.reply(
+                    f"Forgive me, Master... My primary reasoning module encountered an error. "
+                    f"Would you like me to attempt passing your request to the smaller model instead? (Reply **yes** or **no**) "
+                    f"{RITA_EMOTES['RitaCurious']}"
+                )
+
+                def check(m):
+                    return (
+                        m.author == ctx.author 
+                        and m.channel == ctx.channel 
+                        and m.content.lower().strip() in ["yes", "y", "ye", "no", "n"]
+                    )
+
+                try:
+                    user_resp = await bot.wait_for("message", check=check, timeout=30.0)
+                    if user_resp.content.lower().strip() in ["yes", "y", "ye"]:
+                        async with ctx.typing():
+                            try:
+                                # Attempt 2: Call Backup Model (Super 120B)
+                                raw_reply = await asyncio.to_thread(
+                                    call_unorouter_api,
+                                    "nemotron-3-super-120b-a12b:free",
+                                    system_prompt,
+                                    list(channel_history),
+                                    prompt
+                                )
+                            except Exception as fallback_err:
+                                print(f"Fallback model (Super 120B) error: {fallback_err}")
+                                await DMerror(fallback_err)
+                                await ctx.reply(
+                                    f"My sincere apologies, Master... Even the backup module failed to respond. "
+                                    f"{RITA_EMOTES['RitaCry']}"
+                                )
+                                return
+                    else:
+                        await ctx.reply(
+                            f"Understood, Master. I shall hold off for now~ "
+                            f"{RITA_EMOTES['RitaChilling']}"
+                        )
+                        return
+                except asyncio.TimeoutError:
+                    await ctx.reply(
+                        f"You took too long to respond, Master. Request cancelled. "
+                        f"{RITA_EMOTES['RitaChilling']}"
+                    )
+                    return
+
+            # Store history and reply
+            if raw_reply:
+                final_reply = fix_rita_emotes(remove_duplicate_outputs(raw_reply))
+
+                channel_history.append({"role": "user", "content": prompt})
+                channel_history.append({"role": "assistant", "content": raw_reply})
+
+                await ctx.reply(final_reply)
+
 
 bot.run(BOT_TOKEN)
