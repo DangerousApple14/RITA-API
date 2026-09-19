@@ -1568,38 +1568,29 @@ async def how_smort(ctx, *, message: str = None):
     await ctx.reply(embed=embed)
 
 
-@bot.command(
-    name="cup",
-    aliases=[
-        "cup_size",
-        "cupsize",
-        "melons",
-        "booba",
-        "boob_size"
-    ]
-)
-async def cup(ctx, *, user: str = None):
-
-    size, comparison = get_cup_size()
-
-    if user is None:
-        target = "Your"
+@bot.command(name="cup", aliases=["cup_size", "cupsize", "melons", "booba", "boob_size"])
+async def cup(ctx, *, user=None):
+    try:
+        sizes = ['AAA', 'AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']
+        sizes_v = ['fu hua', 'griseo/teri', 'lily/roza/bronya', 'asuka', 'mobius', 'seele', 'veli', 'a lil bigger than veli', 'kiana/kallen', 'felis/carole/sushang', 'himeko/dudu', 'raven/rita', 'sakura/mommy bronya', 'mei', 'aponia/elysia/eden/apho mei', 'HOLY SHIET YOU HAVE THE SAME SIZE AS TIMIDO?!?!?']
+        x = random.choice(sizes)
+        i = sizes.index(x)
+        if user == None:
+            str1 = f"Your cup size is....{x}.\n"
+        else:
+            str1 = f"{user}'s cup size is....{x}.\n"
+    except ValueError:
+        pass
     else:
-        target = f"{user}'s"
+        str2 = f"which is the same as... {sizes_v[i]}."
+        embed = discord.Embed(title='Cup Size Detektor 2069.',
+                              description=str1 + str2,
+                              color=discord.Colour.dark_red()
+        )
 
-    embed = discord.Embed(
-        title="Cup Size Detektor 2069.",
-        description=(
-            f"{target} cup size is.... **{size}**.\n"
-            f"Which is the same as... **{comparison}**."
-        ),
-        color=discord.Colour.dark_red()
-    )
-
-    embed.set_footer(text="For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters.")
-
-    await ctx.reply(embed=embed)
-
+        embed.set_footer(text="For reference, type 'rita cupref' to see the full list of cup sizes and their corresponding characters.")
+        await ctx.reply(embed=embed)
+    
 
 @bot.command(
     name="cupref",
