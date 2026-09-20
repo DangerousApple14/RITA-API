@@ -2947,7 +2947,7 @@ def call_unorouter_api(model_name: str, system_prompt: str, history: list, user_
     return res.choices[0].message.content
 
 
-@bot.command(name="solve", aliases=["smarterai", "execute"])
+@bot.command(name="solve", aliases=["uai"])
 async def solve(ctx, *, prompt: str = ""):
     cool_kids = [1488966462935666760, 772842742145089546]
 
