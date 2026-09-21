@@ -29,6 +29,7 @@ NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 LANGSEARCH_API_KEY = os.environ.get("LANGSEARCH_API_KEY")
 CUSTOM_API_KEY = os.environ.get("CUSTOM_API_KEY")
 UNOROUTER_API_KEY = os.environ.get("UNOROUTER_API_KEY")
+COOL_KIDS = os.environ.get("COOL_KIDS").split(", ")
 
 def init_database():
 
@@ -2683,11 +2684,37 @@ async def pvp(ctx, *, message: str = None):
             color=color,
         )
 
-    await ctx.send(f"{mentions[uid1]} vs {mentions[uid2]}... it begins. {RITA_EMOTES['RitaMenacingA']}")
+    await ctx.send(
+        f"{mentions[uid1]} vs {mentions[uid2]}... it begins. {RITA_EMOTES['RitaMenacingA']}\n"
+        f"*React to a stat card to skip ahead~*"
+    )
+
     status = await ctx.send(embed=stats_embed(user1, ctx.author, discord.Colour.blue()))
-    await asyncio.sleep(5)
+
+    async def stats_phase(delay: float = 30.0):
+        """Holds the current stat card for up to `delay` seconds.
+        Any reaction from either fighter ends the wait early."""
+        try:
+            await bot.wait_for(
+                "reaction_add",
+                check=lambda r, u: r.message.id == status.id and u.id in (uid1, uid2),
+                timeout=delay,
+            )
+        except asyncio.TimeoutError:
+            pass
+
+    await stats_phase()
     await status.edit(embed=stats_embed(user2, target_member, discord.Colour.red()))
-    await asyncio.sleep(5)
+    await stats_phase()
+
+    # stats done — wipe leftover reactions, edit the card away...
+    try:
+        await status.clear_reactions()
+    except discord.HTTPException:
+        pass
+
+    await status.edit(embed=discord.Embed(title="⚔️ The battle begins!", color=discord.Colour.green()))
+    battle_msg = status
 
     def hp_bar(pid):
         filled = max(0, min(10, round(hp[pid] / max_hp[pid] * 10)))
@@ -2710,7 +2737,7 @@ async def pvp(ctx, *, message: str = None):
             color=discord.Colour.green(),
         )
 
-    battle_msg = await ctx.send(embed=discord.Embed(title="⚔️ The battle begins!", color=discord.Colour.green()))
+    battle_msg = await ctx.send(embed=discord.Embed(title=f"{RITA_EMOTES["RitaMenacingA"]} The battle begins!", color=discord.Colour.green()))
     prompt_msg = await ctx.send(
         "On your turn, press a button:\n"
         f"{RITA_EMOTES['RitaMenacing']} Attack • "
@@ -2725,7 +2752,7 @@ async def pvp(ctx, *, message: str = None):
         turn_order = [uid1, uid2] if round_num % 2 == 1 else [uid2, uid1]
         actions = {}
 
-        # ---- collect actions ONE PLAYER AT A TIME (this is the turn-based part) ----
+        # ---- collect actions ONE PLAYER AT A TIME ----
         for pid in turn_order:
             if hp[pid] <= 0:
                 continue
@@ -2751,23 +2778,23 @@ async def pvp(ctx, *, message: str = None):
 
             if act == "harden":
                 if hardened[pid]:
-                    events.append(f"😤 {names[pid]} is already rock solid! (wasted turn)")
+                    events.append(f"{RITA_EMOTES["RitaCaughtYouIn4K"]} {names[pid]} is already rock solid! (wasted turn)")
                 elif arousal[pid] >= HARDEN_AT:
                     hardened[pid] = True
                     asset = "nipples" if fighters[pid].stats["Chromosomes"] == "XX" else "boner"
-                    events.append(f"🔥 {names[pid]} HARDENS! Their {asset} buffs them and seduces the enemy!")
+                    events.append(f"{RITA_EMOTES["RitaSurprised"]} {names[pid]} HARDENS! Their {asset} buffs them and seduces the enemy!")
                 else:
-                    events.append(f"😳 {names[pid]} tried to harden but isn't aroused enough... turn wasted!")
+                    events.append(f"{RITA_EMOTES["RitaChuckle"]} {names[pid]} tried to harden but isn't aroused enough... turn wasted!")
 
             elif act == "segs":
                 diff = abs(arousal[uid1] - arousal[uid2])
                 if diff == 0:
-                    events.append("💦 They went for segs perfectly in sync... balanced. Nothing happens!")
+                    events.append(f"{RITA_EMOTES["RitaMakesOutWithDudu"]} They went for segs perfectly in sync... balanced. Nothing happens!")
                 else:
                     victim = uid1 if arousal[uid1] < arousal[uid2] else uid2
                     dmg = calc_sex_damage(fighters[victim], fighters[opp].stats["Chromosomes"], diff)
                     hp[victim] = max(0, hp[victim] - dmg)
-                    events.append(f"💦 SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
+                    events.append(f"{RITA_EMOTES["RitaMakesOutWithDudu"]} SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
                 arousal[uid1] = arousal[uid2] = 0
 
             else:  # attack
@@ -2949,10 +2976,8 @@ def call_unorouter_api(model_name: str, system_prompt: str, history: list, user_
 
 @bot.command(name="solve", aliases=["uai"])
 async def solve(ctx, *, prompt: str = ""):
-    cool_kids = [1488966462935666760, 772842742145089546]
 
-    # 1. Guild Whitelist Check: Redirect to default rita_ai if not in allowed server
-    if not ctx.guild or ctx.guild.id not in cool_kids:
+    if not ctx.guild or ctx.guild.id not in COOL_KIDS:
         await rita_ai(ctx, prompt=prompt)
         return
 
