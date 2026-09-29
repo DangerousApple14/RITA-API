@@ -2872,13 +2872,6 @@ async def steal_emojis(ctx):
         if target_msg.stickers:
             stickers_to_process.extend(target_msg.stickers)
 
-        if target_msg.snapshots:
-            for snapshot in target_msg.snapshots:
-                if snapshot.content:
-                    all_texts.append(snapshot.content)
-                if snapshot.stickers:
-                    stickers_to_process.extend(snapshot.stickers)
-
     combined_text = " ".join(all_texts)
     matches = EMOTE_REGEX.findall(combined_text)
 
