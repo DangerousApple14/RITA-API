@@ -2737,7 +2737,7 @@ async def pvp(ctx, *, message: str = None):
             color=discord.Colour.green(),
         )
 
-    battle_msg = await ctx.send(embed=discord.Embed(title=f"{RITA_EMOTES["RitaMenacingA"]} The battle begins!", color=discord.Colour.green()))
+    battle_msg = await ctx.send(embed=discord.Embed(title=f"{RITA_EMOTES['RitaMenacingA']} The battle begins!", color=discord.Colour.green()))
     prompt_msg = await ctx.send(
         "On your turn, press a button:\n"
         f"{RITA_EMOTES['RitaMenacing']} Attack • "
@@ -2778,23 +2778,23 @@ async def pvp(ctx, *, message: str = None):
 
             if act == "harden":
                 if hardened[pid]:
-                    events.append(f"{RITA_EMOTES["RitaCaughtYouIn4K"]} {names[pid]} is already rock solid! (wasted turn)")
+                    events.append(f"{RITA_EMOTES['RitaCaughtYouIn4K']} {names[pid]} is already rock solid! (wasted turn)")
                 elif arousal[pid] >= HARDEN_AT:
                     hardened[pid] = True
                     asset = "nipples" if fighters[pid].stats["Chromosomes"] == "XX" else "boner"
-                    events.append(f"{RITA_EMOTES["RitaSurprised"]} {names[pid]} HARDENS! Their {asset} buffs them and seduces the enemy!")
+                    events.append(f"{RITA_EMOTES['RitaSurprised']} {names[pid]} HARDENS! Their {asset} buffs them and seduces the enemy!")
                 else:
-                    events.append(f"{RITA_EMOTES["RitaChuckle"]} {names[pid]} tried to harden but isn't aroused enough... turn wasted!")
+                    events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} tried to harden but isn't aroused enough... turn wasted!")
 
             elif act == "segs":
                 diff = abs(arousal[uid1] - arousal[uid2])
                 if diff == 0:
-                    events.append(f"{RITA_EMOTES["RitaMakesOutWithDudu"]} They went for segs perfectly in sync... balanced. Nothing happens!")
+                    events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} They went for segs perfectly in sync... balanced. Nothing happens!")
                 else:
                     victim = uid1 if arousal[uid1] < arousal[uid2] else uid2
                     dmg = calc_sex_damage(fighters[victim], fighters[opp].stats["Chromosomes"], diff)
                     hp[victim] = max(0, hp[victim] - dmg)
-                    events.append(f"{RITA_EMOTES["RitaMakesOutWithDudu"]} SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
+                    events.append(f"{RITA_EMOTES['RitaMakesOutWithDudu']} SEGGS!! {names[victim]} was less aroused and takes {dmg:.1f} sex damage!")
                 arousal[uid1] = arousal[uid2] = 0
 
             else:  # attack
@@ -2952,7 +2952,7 @@ async def steal_emojis(ctx):
 @steal_emojis.error
 async def steal_emojis_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send(f"Master, you need the `Manage Emojis and Stickers` permission to use this command. {RITA_EMOTES["RitaIsPityingYou"]}")
+        await ctx.send(f"Master, you need the `Manage Emojis and Stickers` permission to use this command. {RITA_EMOTES['RitaIsPityingYou']}")
 
 def call_unorouter_api(model_name: str, system_prompt: str, history: list, user_prompt: str) -> str:
     """Synchronous worker thread function for UnoRouter API requests."""
