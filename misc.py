@@ -169,10 +169,9 @@ RITA_EMOTES = {
 
 # FUNCTIONS
 
-def DMerror(e, u_id = DANGY_ID):
-    user = bot.fetch_user(u_id)
-    user.send(f"```py\n{e}\n```")
-    
+async def DMerror(error):
+    user = await bot.fetch_user(DANGY_ID)  
+    await user.send(f"```py\n{error}```")
 
 def approval(message):
 
@@ -237,12 +236,12 @@ def get_cup_size(cup: str = None):
 
 HARDEN_AT = 50
 AROUSAL_MAX = 100
-ACTION_TIMEOUT = 15      # seconds per TURN (not per round anymore)
+ACTION_TIMEOUT = 15      # seconds per turn
 MAX_ROUNDS = 25
 
-AROUSAL_PER_TURN = 10    # base self-gain per round
+AROUSAL_PER_TURN = 30    # base self-gain per round
 AROUSAL_HARDENED = 5     # self-gain while hardened (hardening calms you down)
-SEDUCTION_RATE = 20      # x: bonus arousal the OPPONENT gets from your hardened "asset"
+SEDUCTION_RATE = 40      # x: bonus arousal the OPPONENT gets from your hardened "asset"
 
 ACTION_EMOJIS = {
     RITA_EMOTES["RitaMenacing"]: "attack",
@@ -378,4 +377,3 @@ def make_turn_view(acting_pid, acting_name):
         view.add_item(btn)
 
     return view, choice
-
