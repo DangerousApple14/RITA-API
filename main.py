@@ -2609,7 +2609,7 @@ async def rita_search(ctx, *, query: str = ""):
 # PvP COMMAND
 # ============================================================
 
-@bot.command(name="pvp", aliases=["fight", "battle"])
+@bot.command(name="pvp", aliases=["fight", "battle", "sexfight", "segs"])
 async def pvp(ctx, *, message: str = None):
     if not message or not has_user_ping(message):
         await ctx.reply(f"Master, you need to tag who you want to fight... {RITA_EMOTES['RitaCurious']}")
@@ -2628,7 +2628,7 @@ async def pvp(ctx, *, message: str = None):
         await ctx.reply(f"Master, I won't let you bully my kind... {RITA_EMOTES['RitaCri']}")
         return
 
-    # ---- challenge / accept ----
+    # challenge / accept
     challenge_msg = await ctx.reply(
         f"{target_member.mention}, Master {ctx.author.display_name} has challenged you to a duel! "
         f"React with any emoji within 15 seconds to accept."
@@ -2648,7 +2648,7 @@ async def pvp(ctx, *, message: str = None):
 
     await challenge_msg.add_reaction("✅")
 
-    # ---- optional custom stats: "pvp @user hp 250 arousal 30" ----
+    # optional custom stats: "rita pvp @user hp 250 arousal 30"
     hp_m = re.search(r"\bhp\s+(\d+)", message.lower())
     ar_m = re.search(r"\barousal\s+(\d+)", message.lower())
     custom_hp = max(10, min(999, int(hp_m.group(1)))) if hp_m else 100
@@ -2713,8 +2713,26 @@ async def pvp(ctx, *, message: str = None):
     except discord.HTTPException:
         pass
 
-    await status.edit(embed=discord.Embed(title="⚔️ The battle begins!", color=discord.Colour.green()))
-    battle_msg = status
+    battle_msg = await ctx.send(embed=discord.Embed(title=f"{RITA_EMOTES['RitaMenacingA']} The battle begins!", color=discord.Colour.green()))
+
+    try:    # pussy forfeiting
+        await battle_msg.add_reaction(RITA_EMOTES['RitaMad'])
+    except discord.HTTPException:
+        pass
+
+    async def watch_forfeit():
+        """Resolves with the forfeiter's ID once a fighter reacts RitaMad on the battle board."""
+        def check(reaction, user):
+            return (
+                reaction.message.id == battle_msg.id
+                and str(reaction.emoji) == RITA_EMOTES['RitaMad']
+                and user.id in (uid1, uid2)
+            )
+        _, user = await bot.wait_for("reaction_add", check=check)
+        return user.id
+
+    forfeit_task = asyncio.create_task(watch_forfeit())
+    forfeiter = None
 
     def hp_bar(pid):
         filled = max(0, min(10, round(hp[pid] / max_hp[pid] * 10)))
@@ -2742,17 +2760,15 @@ async def pvp(ctx, *, message: str = None):
         "On your turn, press a button:\n"
         f"{RITA_EMOTES['RitaMenacing']} Attack • "
         f"{RITA_EMOTES['RitaSurprised']} Harden (needs {HARDEN_AT}+ arousal) • "
-        f"{RITA_EMOTES['RitaMiddleFinger']} Segs"
+        f"{RITA_EMOTES['RitaMiddleFinger']} Segs\n"
+        f"Or react {RITA_EMOTES['RitaMad']} on the battle board to forfeit anytime... Pussy~ Ahem, I apologize for the language {RITA_EMOTES['RitaChuckle']}"
     )
 
     winner = None
     for round_num in range(1, MAX_ROUNDS + 1):
         events = []
-        # alternate who goes first each round for fairness
         turn_order = [uid1, uid2] if round_num % 2 == 1 else [uid2, uid1]
         actions = {}
-
-        # ---- collect actions ONE PLAYER AT A TIME ----
         for pid in turn_order:
             if hp[pid] <= 0:
                 continue
@@ -2761,15 +2777,31 @@ async def pvp(ctx, *, message: str = None):
                 content=f"**Round {round_num} — {names[pid]}'s turn!** ({ACTION_TIMEOUT}s)",
                 view=view,
             )
-            await view.wait()
+            # race: button press vs forfeit reaction
+            view_task = asyncio.create_task(view.wait())
+            done, _ = await asyncio.wait(
+                {view_task, forfeit_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
+            if forfeit_task in done:
+                forfeiter = forfeit_task.result()
+                if not view_task.done():
+                    view_task.cancel()
+                view.stop()
+                break
+
+            await view_task  # button won the race — collect the action as usual
             if choice["action"]:
                 actions[pid] = choice["action"]
             else:
                 actions[pid] = random.choice(list(ACTION_EMOJIS.values()))
-                events.append(f"⏰ {names[pid]} hesitated and flailed randomly!")
+                events.append(f"{RITA_EMOTES['RitaChuckle']} {names[pid]} hesitated and flailed randomly!")
 
-        # ---- resolve actions in turn order ----
+        if forfeiter:
+            break
+
+        # resolve actions in turn order
         for pid in turn_order:
             if pid not in actions or hp[pid] <= 0:
                 continue
@@ -2812,7 +2844,7 @@ async def pvp(ctx, *, message: str = None):
             # live feedback after every turn
             await battle_msg.edit(embed=battle_embed(round_num, events))
 
-        # ---- end of round: passive arousal for both ----
+        # end of round passive arousal for both
         for pid in (uid1, uid2):
             opp = uid2 if pid == uid1 else uid1
             before = arousal[pid]
@@ -2821,7 +2853,7 @@ async def pvp(ctx, *, message: str = None):
                 arousal[pid] + calc_passive_arousal(fighters[pid], fighters[opp], hardened[pid], hardened[opp]),
             )
             if before < HARDEN_AT <= arousal[pid]:
-                events.append(f"❗ {names[pid]} is getting flustered... they can HARDEN now!")
+                events.append(f"{RITA_EMOTES['RitaShocked']} {names[pid]} is getting flustered... they can HARDEN now!")
 
         await battle_msg.edit(embed=battle_embed(round_num, events))
 
@@ -2832,15 +2864,30 @@ async def pvp(ctx, *, message: str = None):
         if hp[uid1] <= 0:
             winner = uid2; break
 
-    if winner is None:
+    if not forfeit_task.done():  # shut down the watcher if nobody forfeited
+        forfeit_task.cancel()
+        try:
+            await forfeit_task
+        except asyncio.CancelledError:
+            pass
+
+    if forfeiter:
+        winner = uid2 if forfeiter == uid1 else uid1
+        events.append(f"{RITA_EMOTES['RitaMad']} {names[forfeiter]} could take no more... **FORFEIT!**")
+        await battle_msg.edit(embed=battle_embed(round_num, events))
+    elif winner is None:
         f1, f2 = hp[uid1] / max_hp[uid1], hp[uid2] / max_hp[uid2]
         winner = uid1 if f1 > f2 else uid2 if f2 > f1 else "draw"
 
     await prompt_msg.edit(content="The duel has ended!", view=None)
+
     if winner == "draw":
         await ctx.send(f"Both masters collapse simultaneously... it's a draw. {RITA_EMOTES['RitaCri']}")
     else:
-        await ctx.send(f"🏆 {mentions[winner]} wins the duel! {RITA_EMOTES['RitaCheers']}")
+        await ctx.send(
+            f"🏆 {mentions[winner]} wins the duel{' by forfeit!' if forfeiter else '!'} "
+            f"{RITA_EMOTES['RitaCheers']}"
+        )
 
 # ============================================================
 # AURA ROULETTE
