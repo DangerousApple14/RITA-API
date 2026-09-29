@@ -29,7 +29,7 @@ NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY")
 LANGSEARCH_API_KEY = os.environ.get("LANGSEARCH_API_KEY")
 CUSTOM_API_KEY = os.environ.get("CUSTOM_API_KEY")
 UNOROUTER_API_KEY = os.environ.get("UNOROUTER_API_KEY")
-COOL_KIDS = os.environ.get("COOL_KIDS").split(", ")
+COOL_KIDS = [int(server_id) for server_id in (os.environ.get("COOL_KIDS").split(", "))]
 
 def init_database():
 
